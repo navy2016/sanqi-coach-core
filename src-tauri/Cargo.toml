@@ -1,0 +1,28 @@
+[package]
+name = "sanqi-coach-core"
+version = "0.1.0"
+description = "三棋思维教练核心层：三棋规则引擎 + UCI/GTP 引擎对接 + 变化树评分 + AI 讲解服务"
+edition = "2021"
+rust-version = "1.77"
+
+[lib]
+name = "sanqi_coach_core"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-shell = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "process", "io-util", "sync", "time"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }
+futures-util = "0.3"
+thiserror = "2"
+parking_lot = "0.12"
+
+[profile.release]
+opt-level = 2
+lto = true

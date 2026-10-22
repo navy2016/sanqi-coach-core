@@ -1,0 +1,58 @@
+/* ============================================================
+ * 三棋思维教练 · 设计令牌（Design Tokens）
+ * 取值依据：6 篇公众号文章插图像素级分析
+ *  - 米白背景 rgb(252,252,252)（文章插图中背景 247~252）
+ *  - 暖棕木色棋盘 rgb(192,156,122)（article-3 图2 棋盘木纹色格）
+ *  - 主按钮蓝 rgb(75,126,237)（article-2 图4 底部 42px 蓝色操作条）
+ *  - 评级绿高亮 rgb(151,231,151)（article-3 图6 最佳步绿色高亮带）
+ *  - 卡片圆角 8px、居中、轻投影
+ * ============================================================ */
+
+:root {
+  /* ---- 背景与卡片 ---- */
+  --bg: rgb(252, 252, 252);
+  --bg-soft: rgb(247, 242, 234);
+  --card-bg: #ffffff;
+  --card-radius: 8px;
+  --card-shadow: 0 2px 8px rgba(60, 40, 20, 0.08);
+  --card-border: 1px solid rgba(120, 90, 60, 0.12);
+
+  /* ---- 棋盘暖棕木色系 ---- */
+  --board-wood: rgb(192, 156, 122);      /* 木纹色格主色 */
+  --board-wood-light: rgb(219, 174, 121);/* 卡片/浅格 */
+  --board-wood-dark: rgb(145, 103, 69);  /* 深棕（Android 顶部条/深格） */
+  --board-line: rgba(90, 60, 35, 0.55);  /* 棋盘线 */
+  --board-grid-strong: rgba(80, 50, 28, 0.85);
+
+  /* ---- 主色与操作 ---- */
+  --accent: rgb(75, 126, 237);           /* 主按钮蓝 */
+  --accent-hover: rgb(59, 115, 237);
+  --accent-soft: rgba(75, 126, 237, 0.12);
+  --text-main: rgb(50, 40, 32);
+  --text-sub: rgb(120, 105, 90);
+
+  /* ---- 走法评级档位色 ---- */
+  --grade-best: rgb(46, 152, 84);        /* ✓ 最佳（绿） */
+  --grade-best-bg: rgb(151, 231, 151);   /* 最佳行绿色高亮带 */
+  --grade-good: rgb(75, 126, 237);       /* 良好（蓝） */
+  --grade-suspect: rgb(214, 168, 0);     /* ⚠ 可疑（黄） */
+  --grade-mistake: rgb(224, 123, 57);    /* ✗ 失误（橙） */
+  --grade-blunder: rgb(214, 69, 69);     /* ✗✗ 严重失误（红） */
+  --grade-global: rgb(212, 160, 23);     /* ★ 全局最优（金） */
+
+  /* ---- 间距与字号 ---- */
+  --gap: 12px;
+  --gap-lg: 20px;
+  --radius-pill: 999px;
+  --font-main: 'PingFang SC', 'HarmonyOS Sans SC', 'Microsoft YaHei', system-ui, sans-serif;
+
+  /* ---- 布局 ---- */
+  --board-max: min(72vh, 640px);
+}
+
+/* 深色环境下的轻适配（Tauri 桌面深色系统主题时保持米白，不做暗色反转） */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --card-shadow: 0 2px 10px rgba(60, 40, 20, 0.14);
+  }
+}
