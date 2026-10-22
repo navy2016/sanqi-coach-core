@@ -16,7 +16,7 @@ impl Default for AiConfig {
     fn default() -> Self {
         Self {
             base_url: "https://api.deepseek.com/v1".into(),
-            api_key: "".into(),
+            api_key: String::new(),
             model: "deepseek-chat".into(),
         }
     }
