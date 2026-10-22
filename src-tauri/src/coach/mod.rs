@@ -24,7 +24,8 @@ pub type EvalGrade = Grade;
 pub struct ReviewStep {
     pub index: usize,
     pub side: String,
-    pub move: String,
+    #[serde(rename = "move")]
+    pub mv: String,
     pub grade: Grade,
     pub loss: i32,
     pub turning: bool,
@@ -34,7 +35,8 @@ pub struct ReviewStep {
 /// 变化树节点
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VariationNode {
-    pub move: String,
+    #[serde(rename = "move")]
+    pub mv: String,
     pub grade: String,
     pub score: Option<i32>,
     pub tags: Option<Vec<String>>,
@@ -44,19 +46,22 @@ pub struct VariationNode {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BestReply {
-    pub move: String,
+    #[serde(rename = "move")]
+    pub mv: String,
     pub followUps: Option<Vec<FollowUp>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AltReply {
-    pub move: String,
+    #[serde(rename = "move")]
+    pub mv: String,
     pub reply: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FollowUp {
-    pub move: String,
+    #[serde(rename = "move")]
+    pub mv: String,
     pub tags: Option<Vec<String>>,
 }
 
@@ -65,7 +70,8 @@ pub struct FollowUp {
 pub struct ScoredMove {
     pub index: i32,
     pub side: String,
-    pub move: String,
+    #[serde(rename = "move")]
+    pub mv: String,
     pub grade: String,
     pub loss: i32,
     pub turning: Option<bool>,

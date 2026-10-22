@@ -7,6 +7,7 @@
 //   settings/ 设置读写
 //   commands.rs Tauri command 接口层（前端 invoke 入口）
 
+pub mod common;
 pub mod rules;
 pub mod engine;
 pub mod coach;
@@ -14,7 +15,7 @@ pub mod ai;
 pub mod settings;
 pub mod commands;
 
-pub use rules::{Board, GameKind, Move, Piece, Side};
+pub use rules::{GameKind, Move, Piece, Side};
 pub use engine::EngineKind;
 pub use coach::{CandidateEval, EvalGrade, ReviewStep};
 pub use ai::AiConfig;

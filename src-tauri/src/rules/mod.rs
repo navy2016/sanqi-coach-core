@@ -4,7 +4,7 @@
 use serde::{Deserialize, Serialize};
 
 /// 游戏种类
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum GameKind {
     /// 中国象棋 10行×9列

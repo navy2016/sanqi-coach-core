@@ -14,35 +14,35 @@ use crate::common::error::{CoreError, CoreResult};
 #[tauri::command]
 pub async fn make_move(kind: GameKind, game_id: String, mv: Move) -> CoreResult<GameState> {
     // TODO: 调用 rules::Board + engine 评估
-    Err(CoreError::NotImplemented("make_move"))
+    Err(CoreError::NotImplemented("make_move".into()))
 }
 
 /// 求变化树（假设推演，替对手思考）
 #[tauri::command]
 pub async fn get_variations(kind: GameKind, game_id: String, mv: Move) -> CoreResult<VariationResponse> {
     // TODO: 调用 coach:: 变化树计算
-    Err(CoreError::NotImplemented("get_variations"))
+    Err(CoreError::NotImplemented("get_variations".into()))
 }
 
 /// 求讲解（一次性全文；流式经事件推送）
 #[tauri::command]
 pub async fn get_coaching(kind: GameKind, game_id: String, mode: String, pos: Option<String>) -> CoreResult<CoachingResponse> {
     // TODO: 调用 ai:: 流式讲解
-    Err(CoreError::NotImplemented("get_coaching"))
+    Err(CoreError::NotImplemented("get_coaching".into()))
 }
 
 /// 悔棋
 #[tauri::command]
 pub async fn undo_move(kind: GameKind, game_id: String) -> CoreResult<GameState> {
     // TODO: 调用 rules::Board.undo
-    Err(CoreError::NotImplemented("undo_move"))
+    Err(CoreError::NotImplemented("undo_move".into()))
 }
 
 /// 复盘
 #[tauri::command]
 pub async fn analyze_game(kind: GameKind, game_id: String) -> CoreResult<AnalyzeResponse> {
     // TODO: 调用 coach:: 逐手评分
-    Err(CoreError::NotImplemented("analyze_game"))
+    Err(CoreError::NotImplemented("analyze_game".into()))
 }
 
 /// 设置读

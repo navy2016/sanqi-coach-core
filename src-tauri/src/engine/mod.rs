@@ -7,11 +7,11 @@ use crate::rules::{GameKind, Move, Side};
 use crate::common::error::{CoreError, CoreResult};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::io::{BufRead, BufWriter, Read, Write};
+use std::io::{BufReader, BufWriter, Read, Write};
 use std::process::{Child, Command, Stdio};
 
 /// 引擎种类
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum EngineKind {
     Pikafish,
@@ -74,13 +74,24 @@ impl EngineConfig {
 }
 
 /// 引擎进程封装（简化版：同步读写，生产应用需异步/超时）
-#[derive(Debug)]
 pub struct EngineProcess {
     pub kind: EngineKind,
     pub config: EngineConfig,
     child: Option<Child>,
-    stdin: Option<BufWriter<Box<Write>>>,
-    stdout: Option<BufRead<Box<Read>>>,
+    stdin: Option<BufWriter<Box<dyn Write>>>,
+    stdout: Option<BufReader<Box<dyn Read>>>,
+}
+
+impl std::fmt::Debug for EngineProcess {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("EngineProcess")
+            .field("kind", &self.kind)
+            .field("config", &self.config)
+            .field("child_alive", &self.child.is_some())
+            .field("stdin_connected", &self.stdin.is_some())
+            .field("stdout_connected", &self.stdout.is_some())
+            .finish()
+    }
 }
 
 impl EngineProcess {
@@ -93,13 +104,16 @@ impl EngineProcess {
         if config.kind == EngineKind::Simple {
             return Ok(Self {
                 kind: EngineKind::Simple,
-                config: *config,
+                config: config.clone(),
                 child: None,
                 stdin: None,
                 stdout: None,
             });
         }
-        let cmd = Command::new(config.binary_path.clone())
+        let binary = config.binary_path.as_ref().ok_or_else(|| {
+            CoreError::EngineUnavailable("引擎路径未配置".into())
+        })?;
+        let cmd = Command::new(binary.clone())
             .args(&config.args)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -108,12 +122,12 @@ impl EngineProcess {
         if let Err(e) = cmd {
             return Err(CoreError::EngineIo(format!("启动引擎失败: {}", e)));
         }
-        let child = cmd.unwrap();
-        let stdin = child.stdin().map(|s| BufWriter::new(s));
-        let stdout = child.stdout().map(|s| BufRead::new(s));
+        let mut child = cmd.unwrap();
+        let stdin = child.stdin.take().map(|s| BufWriter::new(Box::new(s) as Box<dyn Write>));
+        let stdout = child.stdout.take().map(|s| BufReader::new(Box::new(s) as Box<dyn Read>));
         Ok(Self {
             kind: config.kind,
-            config: *config,
+            config: config.clone(),
             child: Some(child),
             stdin,
             stdout,
@@ -122,7 +136,7 @@ impl EngineProcess {
 
     pub fn send_uci(&mut self, line: &str) -> CoreResult<()> {
         if self.stdin.is_none() {
-            return Err(CoreError::EngineUnavailable("引擎进程 stdin 未连接"));
+            return Err(CoreError::EngineUnavailable("引擎进程 stdin 未连接".into()));
         }
         let input = format!("{}\n", line);
         self.stdin.as_mut().unwrap().write_all(input.as_bytes())?;
@@ -130,26 +144,20 @@ impl EngineProcess {
         Ok(())
     }
 
-    pub fn recv_until(&mut self, marker: &str, timeout_ms: u64) -> CoreResult<String> {
+    /// 读取引擎输出直到出现 marker（简化：行读取，无超时）
+    pub fn recv_until(&mut self, marker: &str) -> CoreResult<String> {
         if self.stdout.is_none() {
-            return Err(CoreError::EngineUnavailable("引擎进程 stdout 未连接"));
+            return Err(CoreError::EngineUnavailable("引擎进程 stdout 未连接".into()));
         }
         let mut out = String::new();
-        let deadline = std::time::Instant::now() + std::time::Duration::from_millis(timeout_ms);
-        let mut buf = [0u8; 4096];
+        let reader = self.stdout.as_mut().unwrap();
+        let mut line = vec![0u8; 4096];
         loop {
-            if self.stdout.as_ref().unwrap().buf_peek(&mut [0u8; 1]).unwrap_or(0) == 0 {
-                if std::time::Instant::now() > deadline {
-                    return Err(CoreError::EngineIo("引擎响应超时"));
-                }
-                std::thread::sleep(std::time::Duration::from_millis(10));
-                continue;
-            }
-            let n = self.stdout.as_mut().unwrap().read(&mut buf)?;
+            let n = reader.read(&mut line)?;
             if n == 0 {
                 break;
             }
-            let chunk = String::from_utf8_lossy(&buf[..n]);
+            let chunk = String::from_utf8_lossy(&line[..n]);
             out.push_str(&chunk);
             if out.contains(marker) {
                 break;
@@ -170,30 +178,30 @@ impl EngineProcess {
 
     /// 获取引擎最佳走法（UCI 协议）
     pub fn best_move_uci(&mut self, fen: &str) -> CoreResult<String> {
-        self.send_uci(format!("position fen {}", fen))?;
-        self.send_uci(format!("go movetime {}", (self.config.max_seconds * 1000.0) as u64))?;
-        let resp = self.recv_until("bestmove", 30000)?;
+        self.send_uci(&format!("position fen {}", fen))?;
+        self.send_uci(&format!("go movetime {}", (self.config.max_seconds * 1000.0) as u64))?;
+        let resp = self.recv_until("bestmove")?;
         for line in resp.split('\n') {
             let t = line.trim();
             if t.starts_with("bestmove ") {
                 return Ok(t[9..].trim().to_string());
             }
         }
-        Err(CoreError::EngineBadResponse("UCI 引擎未返回 bestmove"))
+        Err(CoreError::EngineBadResponse("UCI 引擎未返回 bestmove".into()))
     }
 
     /// 获取引擎最佳走法（GTP 协议）
     pub fn best_move_gtp(&mut self, color: &str, move_list: &[(Side, String)]) -> CoreResult<String> {
         self.send_uci("boardsize 19")?;
-        self.recv_until("\n", 1000)?;
+        self.recv_until("\n")?;
         self.send_uci("clear_board")?;
-        self.recv_until("\n", 1000)?;
+        self.recv_until("\n")?;
         for (_, mv) in move_list {
-            self.send_uci(format!("play {}", mv))?;
-            self.recv_until("\n", 1000)?;
+            self.send_uci(&format!("play {}", mv))?;
+            self.recv_until("\n")?;
         }
-        self.send_uci(format!("genmove {}", color))?;
-        let resp = self.recv_until("\n", 30000)?;
+        self.send_uci(&format!("genmove {}", color))?;
+        let resp = self.recv_until("\n")?;
         let t = resp.trim();
         if t.starts_with("= ") {
             return Ok(t[2..].trim().to_string());
@@ -201,8 +209,7 @@ impl EngineProcess {
         if t.starts_with("? ") {
             return Err(CoreError::EngineBadResponse(format!("GTP 引擎错误: {}", t)));
         }
-        // 也可能直接返回坐标
-        Ok(t)
+        Ok(t.to_string())
     }
 }
 
@@ -235,10 +242,10 @@ impl EngineManager {
             let engine = EngineProcess::start(&config)?;
             self.engines.insert(key, engine);
         }
-        self.engines.get_mut(&key).unwrap()
+        Ok(self.engines.get_mut(&key).unwrap())
     }
     pub fn stop_all(&mut self) {
-        for (_, eng) in self.engines {
+        for (_, eng) in self.engines.iter_mut() {
             eng.stop();
         }
         self.engines.clear();
