@@ -161,16 +161,23 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Setup Android SDK
-        if: steps.readiness.outputs.ready == 'true'
-        uses: android-actions/setup-android@v3
-
-      - name: Install Android NDK
+      - name: Setup Android SDK & NDK
         if: steps.readiness.outputs.ready == 'true'
         run: |
-          sdkmanager --install "ndk;${NDK_VERSION}" > /dev/null
+          # ubuntu-latest 自带 Android SDK，但预装 cmdline-tools 版本与 setup-android@v3 不匹配，
+          # 因此不使用该 action，直接复用预装 SDK 并显式接受许可。
+          export ANDROID_HOME="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          export ANDROID_SDK_ROOT="$ANDROID_HOME"
+          SDKMGR=$(ls "$ANDROID_HOME"/cmdline-tools/*/bin/sdkmanager 2>/dev/null | head -1)
+          if [ -z "$SDKMGR" ]; then echo "::error::未找到 sdkmanager"; exit 1; fi
+          echo "sdkmanager=$SDKMGR"
+          yes | "$SDKMGR" --licenses > /dev/null 2>&1 || true
+          "$SDKMGR" --install "ndk;${NDK_VERSION}" "platform-tools" > /dev/null
+          echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> "$GITHUB_ENV"
           echo "NDK_HOME=$ANDROID_HOME/ndk/${NDK_VERSION}" >> "$GITHUB_ENV"
           echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/${NDK_VERSION}" >> "$GITHUB_ENV"
+          ls "$ANDROID_HOME/ndk/${NDK_VERSION}" | head -3
 
       - name: Install frontend dependencies
         if: steps.readiness.outputs.ready == 'true'
