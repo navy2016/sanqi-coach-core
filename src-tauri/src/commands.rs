@@ -207,3 +207,22 @@ pub fn _grade_of(loss: i32) -> Grade {
 pub fn _pos(r: usize, c: usize) -> Pos {
     Pos::new(r, c)
 }
+/// 引擎状态：前端「引擎」指示灯与设置页用
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EngineStatus {
+    pub kind: String,
+    pub available: bool,
+    pub path: Option<String>,
+    pub bundled: bool,
+}
+
+#[tauri::command]
+pub fn engine_status(kind: GameKind) -> EngineStatus {
+    let cfg = crate::engine::config_with_bundled(kind);
+    EngineStatus {
+        kind: cfg.kind.name().to_string(),
+        available: cfg.is_available(),
+        path: cfg.binary_path.clone(),
+        bundled: cfg.binary_path.is_some(),
+    }
+}

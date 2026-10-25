@@ -251,3 +251,47 @@ impl EngineManager {
         self.engines.clear();
     }
 }
+// ============ 内置运行时：引擎二进制解析 ============
+// 原文要求「内置运行时」：引擎随包分发，不依赖用户手动配置。
+// 查找顺序：环境变量 → 应用资源目录 → Android 原生库目录 → 同目录可执行文件。
+
+/// 按棋种解析内置引擎可执行文件路径
+pub fn resolve_binary(kind: EngineKind) -> Option<String> {
+    let name = kind.name();
+    // 1) 环境变量显式指定（开发/调试）
+    for key in [format!("SANQI_ENGINE_{}", name.to_uppercase()), "SANQI_ENGINE".to_string()] {
+        if let Ok(p) = std::env::var(&key) {
+            if std::path::Path::new(&p).exists() {
+                return Some(p);
+            }
+        }
+    }
+    // 2) 候选路径：桌面资源目录 / Android 原生库 / 当前目录
+    let exe = std::env::current_exe().ok();
+    let exe_dir = exe.as_ref().and_then(|p| p.parent().map(|d| d.to_path_buf()));
+    let mut candidates: Vec<std::path::PathBuf> = Vec::new();
+    if let Some(dir) = &exe_dir {
+        candidates.push(dir.join("resources").join("engine").join(name));
+        candidates.push(dir.join("engine").join(name));
+        candidates.push(dir.join(name));
+        // Android: 原生库以 lib<name>.so 形式随 APK 分发
+        candidates.push(dir.join(format!("lib{name}.so")));
+        candidates.push(dir.join("..").join("lib").join(format!("lib{name}.so")));
+    }
+    candidates.push(std::path::PathBuf::from(format!("/data/local/tmp/{name}")));
+    candidates.push(std::path::PathBuf::from(format!("/usr/local/bin/{name}")));
+    for c in candidates {
+        if c.exists() {
+            return Some(c.to_string_lossy().to_string());
+        }
+    }
+    None
+}
+
+/// 构建带内置路径的默认配置
+pub fn config_with_bundled(kind: GameKind) -> EngineConfig {
+    let ek = EngineKind::from_game(kind);
+    let mut cfg = EngineConfig::default(ek);
+    cfg.binary_path = resolve_binary(ek);
+    cfg
+}

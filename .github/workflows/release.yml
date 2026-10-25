@@ -107,6 +107,21 @@ jobs:
             src-tauri/target
           key: ${{ runner.os }}-cargo-release-${{ hashFiles('src-tauri/Cargo.lock') }}
 
+      - name: Build Pikafish engine (x86-64, 内置运行时)
+        if: steps.readiness.outputs.ready == 'true'
+        run: |
+          set -e
+          sudo apt-get update -qq && sudo apt-get install -y -qq p7zip-full
+          curl -sL -o /tmp/pika.7z https://github.com/official-pikafish/Pikafish/releases/download/Pikafish-2026-09-06/Pikafish.2026-09-06.7z
+          7z x -y -o/tmp/pika /tmp/pika.7z > /dev/null
+          SRC=$(find /tmp/pika -maxdepth 2 -name 'makefile' -o -maxdepth 2 -name 'Makefile' | head -1 | xargs dirname)
+          cd "$SRC/src"
+          make -j4 build ARCH=x86-64 COMP=gcc 2>&1 | tail -3
+          mkdir -p "$GITHUB_WORKSPACE/src-tauri/resources/engine"
+          cp pikafish "$GITHUB_WORKSPACE/src-tauri/resources/engine/pikafish"
+          chmod +x "$GITHUB_WORKSPACE/src-tauri/resources/engine/pikafish"
+          ls -l "$GITHUB_WORKSPACE/src-tauri/resources/engine"
+
       - name: Build Tauri desktop app
         if: steps.readiness.outputs.ready == 'true'
         run: |
@@ -203,6 +218,27 @@ jobs:
       - name: Init Android project
         if: steps.readiness.outputs.ready == 'true'
         run: npx tauri android init --ci
+
+      - name: Build Pikafish engine (arm64-v8a, 内置运行时)
+        if: steps.readiness.outputs.ready == 'true'
+        run: |
+          set -e
+          sudo apt-get update -qq && sudo apt-get install -y -qq p7zip-full
+          curl -sL -o /tmp/pika.7z https://github.com/official-pikafish/Pikafish/releases/download/Pikafish-2026-09-06/Pikafish.2026-09-06.7z
+          7z x -y -o/tmp/pika /tmp/pika.7z > /dev/null
+          SRC=$(find /tmp/pika -maxdepth 2 -name 'makefile' -o -maxdepth 2 -name 'Makefile' | head -1 | xargs dirname)
+          echo "pikafish src: $SRC"
+          cd "$SRC/src"
+          NDK_BIN="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          make -j4 build ARCH=armv8 COMP=clang \
+            CC="$NDK_BIN/aarch64-linux-android24-clang" \
+            CXX="$NDK_BIN/aarch64-linux-android24-clang++" \
+            STRIP="$NDK_BIN/llvm-strip" 2>&1 | tail -5
+          ls -l pikafish
+          DEST="../../gen/android/app/src/main/jniLibs/arm64-v8a"
+          mkdir -p "$DEST"
+          cp pikafish "$DEST/libpikafish.so"
+          ls -l "$DEST"
 
       - name: Build Android APK (debug, aarch64)
         if: steps.readiness.outputs.ready == 'true'

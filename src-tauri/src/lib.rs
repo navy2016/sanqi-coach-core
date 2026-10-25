@@ -38,6 +38,7 @@ pub fn run() {
             commands::undo_move,
             commands::analyze_game,
             commands::new_game,
+            commands::engine_status,
             commands::load_settings,
             commands::save_settings,
         ])
