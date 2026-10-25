@@ -22,6 +22,10 @@ export class App {
   private pendingMove: Move | null = null;
   private lastOpponentMove = '';
   private gameId = 'local-demo';
+  /** 后端返回的真实局面标签矩阵；null 表示尚未开局，用初始局面 */
+  private labels: (string | null)[][] | null = null;
+  /** AI 难度（原文三级设计：入门/进阶/挑战） */
+  private difficulty: 'beginner' | 'intermediate' | 'challenge' = 'intermediate';
   private goGrid: (GoStone | null)[][] = Array.from({ length: 19 }, () =>
     Array.from({ length: 19 }, () => null as GoStone | null),
   );
@@ -41,6 +45,11 @@ export class App {
           <button class="tab-btn" data-kind="go" role="tab" aria-selected="false">围棋</button>
         </nav>
         <button class="btn btn-ghost" data-act="settings" type="button">⚙️ AI 设置</button>
+        <select class="difficulty-select" data-act="difficulty" aria-label="AI 难度">
+          <option value="beginner">入门</option>
+          <option value="intermediate" selected>进阶</option>
+          <option value="challenge">挑战</option>
+        </select>
       </header>
       <main class="app-main">
         <div class="board-zone"><div class="board-wrap"></div></div>
@@ -66,6 +75,9 @@ export class App {
     host.querySelector('[data-act="undo"]')?.addEventListener('click', () => void this.undo());
     host.querySelector('[data-act="analyze"]')?.addEventListener('click', () => void this.analyze());
     host.querySelector('[data-act="coach"]')?.addEventListener('click', () => void this.requestCoach('situation'));
+    host.querySelector<HTMLSelectElement>('[data-act="difficulty"]')?.addEventListener('change', (e) => {
+      this.difficulty = (e.target as HTMLSelectElement).value as typeof this.difficulty;
+    });
 
     this.coach.onModeRequest = (mode) => void this.requestCoach(mode);
     this.variations.onConfirm = (node) => this.confirmMove(node.move);
@@ -133,7 +145,7 @@ export class App {
     this.coach.setBusy(pos);
     this.variations.clear();
     this.renderBoardState([]);
-    void api.getVariations(this.kind, this.gameId, move)
+    void api.getVariations(this.kind, this.gameId, move, this.difficulty)
       .then((res) => {
         this.coach.stop();
         this.variations.show(res.root);
@@ -149,17 +161,18 @@ export class App {
         this.pendingMove = null;
         this.selected = null;
         this.variations.clear();
-        // TODO(数据层对齐): state.fen → 棋子阵解析由桥接层补充；当前纯 UI 演示保持初始局面
-        void state;
+        // 用后端返回的真实局面刷新棋盘（此前一直渲染初始局面，导致「落子没反应」）
+        if (state.labels) this.labels = state.labels;
         this.renderBoardState();
       });
   }
 
   private async undo(): Promise<void> {
-    await api.undoMove(this.kind, this.gameId);
+    const state = await api.undoMove(this.kind, this.gameId);
     this.selected = null;
     this.pendingMove = null;
     this.variations.clear();
+    if (state.labels) this.labels = state.labels;
     this.renderBoardState();
   }
 
@@ -203,12 +216,54 @@ export class App {
   private renderBoardState(hints: Pos[] = []): void {
     if (!this.board) return;
     const shared = { selected: this.selected, hints, lastMove: null };
+    const L = this.labels;
     if (this.board instanceof XiangqiBoard) {
-      this.board.setState({ pieces: startXiangqi(), ...shared });
+      this.board.setState({ pieces: L ? this.toXiangqi(L) : startXiangqi(), ...shared });
     } else if (this.board instanceof ChessBoard) {
-      this.board.setState({ pieces: startChess(), ...shared });
+      this.board.setState({ pieces: L ? this.toChess(L) : startChess(), ...shared });
     } else {
-      this.board.setState({ pieces: this.goGrid, ...shared });
+      this.board.setState({ pieces: L ? this.toGo(L) : this.goGrid, ...shared });
     }
+  }
+
+  /** "white:K" → 象棋棋子（white=红方） */
+  private toXiangqi(L: (string | null)[][]): (import('../boards/xiangqi').XiangqiPiece | null)[][] {
+    const NAMES: Record<string, [string, string]> = {
+      K: ['帅', '将'], A: ['仕', '士'], E: ['相', '象'], H: ['马', '马'],
+      R: ['车', '车'], C: ['炮', '炮'], P: ['兵', '卒'], B: ['相', '象'], N: ['马', '马'],
+    };
+    return L.map((row) =>
+      row.map((cell) => {
+        if (!cell) return null;
+        const [side, name] = cell.split(':');
+        const isRed = side === 'white';
+        const pair = NAMES[name] ?? ['?', '?'];
+        return { side: isRed ? ('red' as const) : ('black' as const), label: isRed ? pair[0] : pair[1] };
+      }),
+    );
+  }
+
+  /** "white:K" → 国象棋子 */
+  private toChess(L: (string | null)[][]): (import('../boards/chess').ChessPiece | null)[][] {
+    return L.map((row) =>
+      row.map((cell) => {
+        if (!cell) return null;
+        const [side, name] = cell.split(':');
+        return {
+          side: side === 'white' ? ('white' as const) : ('black' as const),
+          kind: name as import('../boards/chess').ChessPiece['kind'],
+        };
+      }),
+    );
+  }
+
+  /** "white:S" → 围棋棋子 */
+  private toGo(L: (string | null)[][]): (GoStone | null)[][] {
+    return L.map((row) =>
+      row.map((cell) => {
+        if (!cell) return null;
+        return cell.startsWith('white') ? ('white' as const) : ('black' as const);
+      }),
+    );
   }
 }

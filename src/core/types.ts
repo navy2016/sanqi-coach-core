@@ -31,6 +31,8 @@ export interface Move {
 export interface GameState {
   /** 引擎侧局面表示：象棋/国象 FEN，围棋 棋盘串（如 "B...W" 行序） */
   fen: string;
+  /** 渲染用标签矩阵（与棋盘同形）：如 "white:K" / "black:卒" / "white:S" */
+  labels?: (string | null)[][];
   /** 已走手数 */
   moveCount: number;
   /** 轮到哪方（象棋/国象：'red'|'black' / 'white'|'black'；围棋：'black'|'white'） */

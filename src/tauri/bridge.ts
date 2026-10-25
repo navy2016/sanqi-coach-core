@@ -106,8 +106,10 @@ export const api = {
       fen: '', moveCount: 1, turn: 'black', lastMove: move,
     });
   },
-  async getVariations(kind: string, gameId: string, move: Move): Promise<{ root: VariationNode[] }> {
-    if (isTauri()) return (await rawInvoke('get_variations', { kind, gameId, move })) as { root: VariationNode[] };
+  async getVariations(kind: string, gameId: string, move: Move, difficulty?: string): Promise<{ root: VariationNode[] }> {
+    if (isTauri()) {
+      return (await rawInvoke('get_variations', { kind, gameId, move, difficulty })) as { root: VariationNode[] };
+    }
     await delay({}, 900); // 模拟 ~1.2s 引擎分析
     return { root: MOCK.variations };
   },

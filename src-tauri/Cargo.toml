@@ -1,6 +1,6 @@
 [package]
 name = "sanqi-coach-core"
-version = "0.1.0"
+version = "0.1.5"
 description = "三棋思维教练核心层：三棋规则引擎 + UCI/GTP 引擎对接 + 变化树评分 + AI 讲解服务"
 edition = "2021"
 rust-version = "1.77"

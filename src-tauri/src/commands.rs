@@ -29,14 +29,42 @@ fn status_str(s: GameStatus) -> String {
 }
 
 fn snapshot_to_state(s: GameSnapshot) -> GameState {
+    let labels = s
+        .board
+        .iter()
+        .map(|row| row.iter().map(|c| c.map(piece_label)).collect())
+        .collect();
     GameState {
         board: s.board,
+        labels,
         turn: s.turn,
         status: status_str(s.status),
         move_history: vec![],
         legal_moves: s.legal_moves,
         history_len: s.history_len,
     }
+}
+
+/// 渲染用标签：`red:车` / `black:将` / `white:K` / `B`（围棋）
+fn piece_label(p: Piece) -> String {
+    let side = match p.side {
+        Side::White => "white",
+        Side::Black => "black",
+    };
+    let name = match p.kind {
+        PieceKind::King => "K",
+        PieceKind::Queen => "Q",
+        PieceKind::Rook => "R",
+        PieceKind::Bishop => "B",
+        PieceKind::Knight => "N",
+        PieceKind::Pawn => "P",
+        PieceKind::Advisor => "A",
+        PieceKind::Elephant => "E",
+        PieceKind::Horse => "H",
+        PieceKind::Cannon => "C",
+        PieceKind::Stone => "S",
+    };
+    format!("{side}:{name}")
 }
 
 /// 走子（含合法性判定）
@@ -64,9 +92,17 @@ pub fn get_variations(
     kind: GameKind,
     game_id: String,
     mv: Move,
+    difficulty: Option<String>,
 ) -> CoreResult<VariationResponse> {
     let snap = store.snapshot(kind, &game_id).map_err(to_core_err)?;
-    let candidates = crate::coach::evaluate_candidates(kind, &snap.board, snap.turn, &snap.legal_moves);
+    let mut candidates = crate::coach::evaluate_candidates(kind, &snap.board, snap.turn, &snap.legal_moves);
+    // 原文三级难度：入门=前 5 个合理候选、进阶=前 3 个、挑战=只给最优
+    let keep = match difficulty.as_deref() {
+        Some("beginner") => 5,
+        Some("challenge") => 1,
+        _ => 3,
+    };
+    candidates.truncate(keep);
     let root = crate::coach::variation_tree(kind, &snap.board, snap.turn, &mv, 3);
     Ok(VariationResponse { candidates, root })
 }
@@ -136,6 +172,8 @@ pub fn save_settings(settings: AppSettings) -> CoreResult<()> {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GameState {
     pub board: Vec<Vec<Option<Piece>>>,
+    /// 渲染用标签矩阵（与 board 同形），前端直接按字符串渲染
+    pub labels: Vec<Vec<Option<String>>>,
     pub turn: Side,
     pub status: String,
     pub move_history: Vec<Move>,
