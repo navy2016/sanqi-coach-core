@@ -59,7 +59,32 @@ pub fn bootstrap(kind: EngineKind, app_data_dir: &Path) -> CoreResult<PathBuf> {
         }
     }
 
+    // 3) KataGo 模型（.bin.gz）——放在 resources 里随包分发，运行时释放到 app data
+    if kind == EngineKind::KataGo {
+        if let Some(model_src) = resolve_model() {
+            let model_dst = app_data_dir.join("kata_model.bin.gz");
+            let need = match (std::fs::metadata(&model_dst), std::fs::metadata(&model_src)) {
+                (Ok(d), Ok(s)) => d.len() != s.len(),
+                _ => true,
+            };
+            if need {
+                std::fs::copy(&model_src, &model_dst)
+                    .map_err(|e| CoreError::EngineIo(format!("释放 KataGo 模型失败: {e}")))?;
+            }
+        }
+    }
+
     Ok(dst)
+}
+
+fn resolve_model() -> Option<PathBuf> {
+    let exe_dir = std::env::current_exe().ok()?.parent()?.to_path_buf();
+    let cands = [
+        exe_dir.join("resources").join("engine").join("kata_model.bin.gz"),
+        exe_dir.join("engine").join("kata_model.bin.gz"),
+        PathBuf::from("/data/local/tmp/kata_model.bin.gz"),
+    ];
+    cands.into_iter().find(|p| p.exists())
 }
 
 fn resolve_nnue(kind: EngineKind) -> Option<PathBuf> {

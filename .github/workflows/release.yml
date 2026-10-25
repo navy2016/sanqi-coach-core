@@ -319,8 +319,12 @@ jobs:
           "$NDK_BIN/llvm-strip" --strip-all katago || true
           cp katago "$DEST/libkatago.so"
           # b18c384 网络（约 100MB）
-          curl -fsSL -o "$DEST/kata_model.bin.gz" https://media.katagotraining.org/uploaded/networks/models/kata1/kata1-b18c384nbt-s9996604416-d4316597426.bin.gz
-          test -s "$DEST/kata_model.bin.gz" || { echo "::error::KataGo 模型下载失败"; exit 1; }
+          # 模型放 Tauri resources（jniLibs 只打包 lib*.so，.bin.gz 会被 Gradle 丢弃）
+          RES="$GITHUB_WORKSPACE/src-tauri/resources/engine"
+          mkdir -p "$RES"
+          curl -fsSL -o "$RES/kata_model.bin.gz" https://media.katagotraining.org/uploaded/networks/models/kata1/kata1-b18c384nbt-s9996604416-d4316597426.bin.gz
+          test -s "$RES/kata_model.bin.gz" || { echo "::error::KataGo 模型下载失败"; exit 1; }
+          ls -l "$RES"
           ls -l "$DEST"
 
       - name: Build Android APK (debug, aarch64)
