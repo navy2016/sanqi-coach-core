@@ -86,8 +86,11 @@ pub fn make_move(
 }
 
 /// 求变化树（假设推演，替对手思考）
+/// 优先走真实引擎：象棋 pikafish / 国象 Stockfish（UCI MultiPV）、围棋自研 MCTS；
+/// 引擎不可用时降级为内置启发式，并在候选里标注（前端据此提示「引擎未就绪」）。
 #[tauri::command]
 pub fn get_variations(
+    app: tauri::AppHandle,
     store: State<'_, GameStore>,
     kind: GameKind,
     game_id: String,
@@ -95,16 +98,89 @@ pub fn get_variations(
     difficulty: Option<String>,
 ) -> CoreResult<VariationResponse> {
     let snap = store.snapshot(kind, &game_id).map_err(to_core_err)?;
-    let mut candidates = crate::coach::evaluate_candidates(kind, &snap.board, snap.turn, &snap.legal_moves);
-    // 原文三级难度：入门=前 5 个合理候选、进阶=前 3 个、挑战=只给最优
     let keep = match difficulty.as_deref() {
         Some("beginner") => 5,
         Some("challenge") => 1,
         _ => 3,
     };
+    let depth = match difficulty.as_deref() {
+        Some("beginner") => 8,
+        Some("challenge") => 16,
+        _ => 12,
+    };
+
+    if let Some(candidates) = engine_candidates(&app, kind, &snap, keep, depth) {
+        let root = crate::coach::variation_tree(kind, &snap.board, snap.turn, &mv, 3);
+        return Ok(VariationResponse { candidates, root });
+    }
+
+    let mut candidates = crate::coach::evaluate_candidates(kind, &snap.board, snap.turn, &snap.legal_moves);
     candidates.truncate(keep);
     let root = crate::coach::variation_tree(kind, &snap.board, snap.turn, &mv, 3);
     Ok(VariationResponse { candidates, root })
+}
+
+/// 引擎候选走法；返回 None 表示引擎不可用（调用方降级）
+fn engine_candidates(
+    app: &tauri::AppHandle,
+    kind: GameKind,
+    snap: &crate::state::GameSnapshot,
+    keep: usize,
+    depth: u32,
+) -> Option<Vec<CandidateEval>> {
+    use tauri::Manager;
+    let dir = app.path().app_data_dir().ok()?;
+
+    if kind == GameKind::Go {
+        use crate::engine::go_mcts::{self, Board, Stone};
+        let rows: Vec<Vec<Option<char>>> = snap
+            .board
+            .iter()
+            .map(|r| r.iter().map(|c| c.map(|p| if p.side == Side::White { 'W' } else { 'B' })).collect())
+            .collect();
+        let stm = if snap.turn == Side::White { Stone::White } else { Stone::Black };
+        let b = Board::from_matrix(&rows, stm);
+        let res = go_mcts::search(&b, 1200, keep);
+        let best = res.first()?.1;
+        let out: Vec<CandidateEval> = res
+            .iter()
+            .map(|(idx, wr)| {
+                let loss = (((best - wr) * 1000.0).round() as i32).max(0);
+                CandidateEval {
+                    move_str: go_mcts::to_gtp(*idx),
+                    loss_cp: loss,
+                    grade: Grade::from_loss(loss),
+                    is_best: false,
+                    eval_cp: Some(((wr * 1000.0).round()) as i32),
+                    best_reply: None,
+                    pv_lines: vec![],
+                }
+            })
+            .collect();
+        return Some(out);
+    }
+
+    let ek = EngineKind::from_game(kind);
+    let path = crate::engine::analysis::bootstrap(ek, &dir).ok()?;
+    let fen = crate::engine::analysis::to_fen(kind, &snap.board, snap.turn);
+    let list = crate::engine::analysis::analyze_multipv(ek, &path, &fen, depth, keep).ok()?;
+    let best = list.first()?.1;
+    let out: Vec<CandidateEval> = list
+        .iter()
+        .map(|(uci, sc)| {
+            let loss = (best - sc).max(0);
+            CandidateEval {
+                move_str: uci.clone(),
+                loss_cp: loss,
+                grade: Grade::from_loss(loss),
+                is_best: *sc == best,
+                eval_cp: Some(*sc),
+                best_reply: None,
+                pv_lines: vec![uci.clone()],
+            }
+        })
+        .collect();
+    Some(out)
 }
 
 /// 求讲解（一次性全文；流式经事件推送）

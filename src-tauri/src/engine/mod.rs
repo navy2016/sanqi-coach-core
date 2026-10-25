@@ -1,4 +1,6 @@
 // ============ 引擎对接层 ============
+pub mod analysis;
+pub mod go_mcts;
 // pikafish（象棋）/ Stockfish（国象）走 UCI 协议
 // KataGo（围棋）走 GTP 协议
 // 引擎二进制由外部路径注入（不打包进仓库）；不可用时降级内置简单搜索

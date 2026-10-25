@@ -125,6 +125,17 @@ jobs:
           if [ -n "$NNUE" ]; then cp "$NNUE" "$OUT/pikafish.nnue"; fi
           ls -l "$OUT"
 
+      - name: Bundle Stockfish engine (x86-64, 国象内置运行时)
+        if: steps.readiness.outputs.ready == 'true'
+        run: |
+          set -e
+          sudo apt-get install -y -qq stockfish || true
+          OUT="$GITHUB_WORKSPACE/src-tauri/resources/engine"
+          mkdir -p "$OUT"
+          BIN=$(command -v stockfish || echo /usr/games/stockfish)
+          cp "$BIN" "$OUT/stockfish" && chmod +x "$OUT/stockfish"
+          ls -l "$OUT"
+
       - name: Build Tauri desktop app
         if: steps.readiness.outputs.ready == 'true'
         run: |
@@ -250,6 +261,24 @@ jobs:
           mkdir -p "$DEST"
           cp pikafish "$DEST/libpikafish.so"
           if [ -n "$NNUE" ]; then cp "$NNUE" "$DEST/pikafish.nnue"; fi
+          ls -l "$DEST"
+
+      - name: Build Stockfish engine (arm64-v8a, 国象内置运行时)
+        if: steps.readiness.outputs.ready == 'true'
+        run: |
+          set -e
+          git clone --depth 1 https://github.com/official-stockfish/Stockfish /tmp/sf-src
+          cd /tmp/sf-src/src
+          NDK_BIN="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          printf '%s\n' '#!/usr/bin/env bash' 'args=()' 'for a in "$@"; do' '  case "$a" in' '    -lpthread|-lrt) ;;' '    *) args+=("$a") ;;' '  esac' 'done' 'exec "$REAL_CXX" "${args[@]}"' > /tmp/sf-wrap.sh
+          chmod +x /tmp/sf-wrap.sh
+          export REAL_CXX="$NDK_BIN/aarch64-linux-android24-clang++"
+          make -j4 build ARCH=armv8 COMP=clang \
+            CC="$NDK_BIN/aarch64-linux-android24-clang" \
+            CXX="/tmp/sf-wrap.sh" \
+            STRIP="$NDK_BIN/llvm-strip" 2>&1 | tail -5
+          DEST="$GITHUB_WORKSPACE/src-tauri/gen/android/app/src/main/jniLibs/arm64-v8a"
+          cp stockfish "$DEST/libstockfish.so"
           ls -l "$DEST"
 
       - name: Build Android APK (debug, aarch64)
