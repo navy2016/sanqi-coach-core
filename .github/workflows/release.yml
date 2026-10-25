@@ -287,7 +287,7 @@ jobs:
         continue-on-error: true
         run: |
           set -e
-          sudo apt-get update -qq && sudo apt-get install -y -qq cmake ninja-build libzip-dev zlib1g-dev
+          sudo apt-get update -qq && sudo apt-get install -y -qq cmake ninja-build libzip-dev zlib1g-dev libeigen3-dev
           git clone --depth 1 --recurse-submodules https://github.com/lightvector/KataGo /tmp/kata
           NDK_BIN="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin"
           # 先交叉编译 zlib 与 libzip（KataGo Eigen 后端依赖）
@@ -310,7 +310,7 @@ jobs:
             -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake" \
             -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-24 \
             -DUSE_BACKEND=EIGEN -DUSE_OPENCL=0 -DUSE_CUDA_BACKEND=0 -DUSE_TENSORRT_BACKEND=0 \
-            -DCMAKE_PREFIX_PATH=/tmp/deps -DNO_GIT_REVISION=1 ..
+            -DCMAKE_PREFIX_PATH=/tmp/deps -DEIGEN3_INCLUDE_DIR=/usr/include/eigen3 -DNO_GIT_REVISION=1 ..
           ninja
           ls -l katago
           DEST="$GITHUB_WORKSPACE/src-tauri/gen/android/app/src/main/jniLibs/arm64-v8a"
