@@ -77,9 +77,15 @@ impl Game {
 }
 
 /// 全局对局仓库（Tauri managed state）
+/// 一局会话：棋局 + 着法历史（KataGo 走 GTP 需要回放着法才能复现局面）
+pub struct Session {
+    pub game: Game,
+    pub history: Vec<Move>,
+}
+
 #[derive(Default)]
 pub struct GameStore {
-    games: Mutex<HashMap<String, Game>>,
+    games: Mutex<HashMap<String, Session>>,
 }
 
 impl GameStore {
@@ -95,9 +101,10 @@ impl GameStore {
         F: FnOnce(&mut Game) -> Result<T, String>,
     {
         let mut guard = self.games.lock().map_err(|_| "对局仓库锁中毒".to_string())?;
-        let game = guard
+        let session = guard
             .entry(game_id.to_string())
-            .or_insert_with(|| Game::new(kind));
+            .or_insert_with(|| Session { game: Game::new(kind), history: Vec::new() });
+        let game = &mut session.game;
         if game.kind() != kind {
             return Err(format!(
                 "对局 {} 是 {}，与请求的 {} 不一致",
@@ -109,23 +116,38 @@ impl GameStore {
         f(game)
     }
 
+    /// 棋局 + 历史的可变访问（落子/悔棋时同步维护历史）
+    pub fn with_session<F, T>(&self, kind: GameKind, game_id: &str, f: F) -> Result<T, String>
+    where
+        F: FnOnce(&mut Game, &mut Vec<Move>) -> Result<T, String>,
+    {
+        let mut guard = self.games.lock().map_err(|_| "对局仓库锁中毒".to_string())?;
+        let session = guard
+            .entry(game_id.to_string())
+            .or_insert_with(|| Session { game: Game::new(kind), history: Vec::new() });
+        if session.game.kind() != kind {
+            return Err(format!("对局 {} 棋种不一致", game_id));
+        }
+        f(&mut session.game, &mut session.history)
+    }
+
     /// 只读快照
     pub fn snapshot(&self, kind: GameKind, game_id: &str) -> Result<GameSnapshot, String> {
-        self.with_game(kind, game_id, |g| {
+        self.with_session(kind, game_id, |g, hist| {
             Ok(GameSnapshot {
                 board: g.matrix(),
                 turn: g.side(),
                 status: g.status(),
                 history_len: g.rules().history_len(),
                 legal_moves: g.rules().legal_moves(),
-                history: Vec::new(),
+                history: hist.clone(),
             })
         })
     }
 
     pub fn reset(&self, kind: GameKind, game_id: &str) -> Result<(), String> {
         let mut guard = self.games.lock().map_err(|_| "对局仓库锁中毒".to_string())?;
-        guard.insert(game_id.to_string(), Game::new(kind));
+        guard.insert(game_id.to_string(), Session { game: Game::new(kind), history: Vec::new() });
         Ok(())
     }
 }

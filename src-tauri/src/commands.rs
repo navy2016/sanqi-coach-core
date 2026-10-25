@@ -77,8 +77,9 @@ pub fn make_move(
     mv: Move,
 ) -> CoreResult<GameState> {
     store
-        .with_game(kind, &game_id, |g| {
+        .with_session(kind, &game_id, |g, hist| {
             g.rules_mut().make_move(&mv)?;
+            hist.push(mv.clone());
             Ok(())
         })
         .map_err(to_core_err)?;
@@ -233,8 +234,9 @@ pub fn get_coaching(
 #[tauri::command]
 pub fn undo_move(store: State<'_, GameStore>, kind: GameKind, game_id: String) -> CoreResult<GameState> {
     store
-        .with_game(kind, &game_id, |g| {
+        .with_session(kind, &game_id, |g, hist| {
             g.rules_mut().unmake_move().ok_or_else(|| "没有可悔的棋".to_string())?;
+            hist.pop();
             Ok(())
         })
         .map_err(to_core_err)?;
