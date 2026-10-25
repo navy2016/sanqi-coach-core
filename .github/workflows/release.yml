@@ -236,11 +236,15 @@ jobs:
           echo "nnue: $NNUE"
           cd /tmp/pika-src/src
           NDK_BIN="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          # Makefile 把 -lpthread -lrt 写死在链接行，而 bionic 里它们在 libc 中，
+          # 直接用包装脚本过滤掉这两个参数（只影响链接，不影响编译）。
+          printf '%s\n' '#!/usr/bin/env bash' 'args=()' 'for a in "$@"; do' '  case "$a" in' '    -lpthread|-lrt) ;;' '    *) args+=("$a") ;;' '  esac' 'done' 'exec "$REAL_CXX" "${args[@]}"' > /tmp/cxx-wrap.sh
+          chmod +x /tmp/cxx-wrap.sh
+          export REAL_CXX="$NDK_BIN/aarch64-linux-android24-clang++"
           make -j4 build ARCH=armv8 COMP=clang \
             CC="$NDK_BIN/aarch64-linux-android24-clang" \
-            CXX="$NDK_BIN/aarch64-linux-android24-clang++" \
-            STRIP="$NDK_BIN/llvm-strip" \
-            LIBS="-latomic" 2>&1 | tail -8
+            CXX="/tmp/cxx-wrap.sh" \
+            STRIP="$NDK_BIN/llvm-strip" 2>&1 | tail -8
           ls -l pikafish
           DEST="$GITHUB_WORKSPACE/src-tauri/gen/android/app/src/main/jniLibs/arm64-v8a"
           mkdir -p "$DEST"
