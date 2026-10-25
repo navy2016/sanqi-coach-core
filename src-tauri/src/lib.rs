@@ -20,3 +20,24 @@ pub use engine::EngineKind;
 pub use coach::{CandidateEval, EvalGrade, ReviewStep};
 pub use ai::AiConfig;
 pub use settings::AppSettings;
+
+/// Tauri v2 应用入口（桌面端与移动端共用）
+///
+/// `mobile_entry_point` 宏是 Android/iOS 构建的硬性要求：
+/// 缺少它时 `tauri android build` 会报
+/// "does not include required runtime symbols"。
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+pub fn run() {
+    tauri::Builder::default()
+        .invoke_handler(tauri::generate_handler![
+            commands::make_move,
+            commands::get_variations,
+            commands::get_coaching,
+            commands::undo_move,
+            commands::analyze_game,
+            commands::load_settings,
+            commands::save_settings,
+        ])
+        .run(tauri::generate_context!())
+        .expect("error while running sanqi-coach");
+}
