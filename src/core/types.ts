@@ -1,4 +1,4 @@
-/** 三棋思维教练 v2 · 公共类型 */
+/** 三棋思维教练 v2 · 公共类型（对齐原文截图字段） */
 
 export type GameKind = 'xiangqi' | 'chess' | 'go';
 export type Side = 'red' | 'black' | 'white';
@@ -9,50 +9,51 @@ export interface Pos {
   col: number;
 }
 
-/** 棋盘格：null=空；否则为棋子标识（象棋用中文，国象用字母，围棋用 B/W） */
 export type Cell = string | null;
 export type BoardMatrix = Cell[][];
 
 export interface Move {
   from: Pos | null;
   to: Pos;
-  /** 围棋为 true */
   drop?: boolean;
   promotion?: string | null;
 }
 
-/** 五档评级（原文分档 A） */
+/** 五档评级 + 全局最优（金★） */
 export type Grade = 'best' | 'good' | 'suspect' | 'mistake' | 'blunder' | 'global';
 
 export interface CandidateEval {
   move: Move;
-  /** 走法文本，如「炮二平五」「Bc4」 */
+  /** 走法文本：象棋「炮二平五」/ 国象「Bf4」/ 围棋「D4」 */
   san: string;
-  /** 评分损失（厘兵/胜率折算） */
+  /** 评分损失（象棋/国象：厘兵；围棋：百分点×100） */
   loss: number;
   grade: Grade;
-  /** 是否全局最优（金色 ★） */
   global?: boolean;
+  /** 引擎原始分（象棋/国象厘兵，围棋胜率×1000） */
+  score?: number;
 }
 
+/** 变化树节点：对 F3 / 我 D4 交替 */
 export interface VariationNode {
-  move: string;
-  /** 手段标签：[威胁] [防守] [发展] [捉子] [抢占中心] [主动] */
+  /** 'opp' 对方 / 'me' 我方 */
+  who: 'opp' | 'me';
+  san: string;
   tag?: string;
   grade?: Grade;
-  /** 该层走法后我方推荐应对 */
-  reply?: string;
-  replyTag?: string;
-  children?: VariationNode[];
+  score?: number;
 }
 
 export interface PreviewResult {
-  /** 候选走法（按质量排序，含本次点击的走法） */
   candidates: CandidateEval[];
-  /** 本次点击走法的完整变化树 */
-  tree: VariationNode[];
-  /** 一句话结论，如「这步给了对手机会」 */
+  /** 对方应对序列（编号 1..n） */
+  line: VariationNode[];
+  /** 一句话结论 */
   verdict: string;
+  /** 当前局面更优的选择（若有） */
+  better?: { san: string; delta: number } | null;
+  /** 围棋专用：胜率与目差 */
+  winrate?: { from: number; to: number; lossPct: number; lossPt: number } | null;
 }
 
 export interface ReviewItem {
@@ -60,13 +61,11 @@ export interface ReviewItem {
   san: string;
   loss: number;
   grade: Grade;
-  /** 转折点 */
   turning?: boolean;
 }
 
 export interface CoachText {
   text: string;
-  /** 是否降级（未配置 AI） */
   degraded: boolean;
 }
 
@@ -76,7 +75,6 @@ export interface AiSettings {
   model: string;
 }
 
-/** 棋谱教学条目 */
 export interface StudyGame {
   id: string;
   name: string;
@@ -84,10 +82,19 @@ export interface StudyGame {
   moves: string[];
 }
 
-/** 残局挑战条目 */
 export interface EndgamePuzzle {
   id: string;
   name: string;
-  goal: '红方胜' | '和棋' | '白方胜';
+  goal: string;
   fen: string;
+}
+
+/** 对局信息（左栏） */
+export interface GameInfo {
+  side: string;
+  turn: string;
+  difficulty: Difficulty;
+  mode: string;
+  evaluation: string;
+  history: { ply: number; san: string }[];
 }

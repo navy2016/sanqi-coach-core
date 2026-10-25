@@ -1,6 +1,6 @@
 /**
- * 业务层桥接：Tauri 环境下走 Rust 命令；浏览器环境走本地模拟引擎（用于 UI 验收与 Web 版）。
- * 原文原则：引擎算、AI 只翻译；AI 不可用时降级基础提示，绝不编造。
+ * 业务层桥接：Tauri 走 Rust 引擎命令；浏览器走本地模拟（UI 验收 / Web 版）。
+ * 原文原则：引擎算、AI 只翻译；AI 不可用时降级基础提示，绝不编造棋理。
  */
 import type {
   AiSettings,
@@ -16,215 +16,176 @@ import type {
   Side,
   VariationNode,
 } from './types';
-import { applyMove, kindOf, legalTargets, sideOf } from './rules';
+import { SIZE, allLegalMoves, applyMove, otherSide } from './rules';
 
-const isTauri = (): boolean => typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
+const isTauri = (): boolean =>
+  typeof window !== 'undefined' && '__TAURI_INTERNALS__' in (window as unknown as Record<string, unknown>);
 
+type TauriInternals = { invoke: (cmd: string, args?: Record<string, unknown>) => Promise<unknown> };
+
+/** 直接走 Tauri 注入的 __TAURI_INTERNALS__，避免额外依赖 @tauri-apps/api */
 async function invoke<T>(cmd: string, args: Record<string, unknown>): Promise<T> {
-  const api = (window as unknown as { __TAURI_INTERNALS__: { invoke: (c: string, a: unknown) => Promise<T> } })
-    .__TAURI_INTERNALS__;
-  return api.invoke(cmd, args);
+  const internals = (window as unknown as { __TAURI_INTERNALS__?: TauriInternals }).__TAURI_INTERNALS__;
+  if (!internals) throw new Error('not in tauri');
+  return (await internals.invoke(cmd, args)) as T;
 }
 
-/* ---------------- 评估（模拟引擎启发式） ---------------- */
+/* ============ 评级 ============ */
 
-const VALUE: Record<string, number> = {
-  帅: 10000, 将: 10000, K: 10000,
-  车: 900, R: 900,
-  炮: 450, C: 450,
-  马: 400, H: 400, N: 400,
-  相: 200, 象: 200, 仕: 200, 士: 200, B: 330, E: 200, A: 200,
-  兵: 100, 卒: 100, P: 100,
-  Q: 900,
-  S: 10,
-};
-
-const val = (cell: string | null): number => (cell ? VALUE[kindOf(cell)] ?? 0 : 0);
-
-/** 从 side 视角的子力差 */
-function material(b: BoardMatrix, side: Side): number {
-  let mine = 0;
-  let theirs = 0;
-  for (const row of b) {
-    for (const cell of row) {
-      if (!cell) continue;
-      const s = sideOf(cell);
-      if (s === side) mine += val(cell);
-      else theirs += val(cell);
-    }
-  }
-  return mine - theirs;
-}
-
+/** 原文分档 A：0-30 最佳 / 31-80 良好 / 81-180 可疑 / 181-350 失误 / >350 严重失误 */
 export function gradeOf(loss: number): Grade {
-  if (loss <= 30) return 'best';
-  if (loss <= 80) return 'good';
-  if (loss <= 180) return 'suspect';
-  if (loss <= 350) return 'mistake';
+  const l = Math.abs(loss);
+  if (l <= 30) return 'best';
+  if (l <= 80) return 'good';
+  if (l <= 180) return 'suspect';
+  if (l <= 350) return 'mistake';
   return 'blunder';
 }
 
-const GRADE_LABEL: Record<Grade, string> = {
-  best: '✓ 最佳',
-  good: '✓ 良好',
-  suspect: '⚠ 可疑',
-  mistake: '✗ 失误',
-  blunder: '✗✗ 严重失误',
-  global: '★ 全局最优',
+export function gradeLabel(g: Grade): string {
+  switch (g) {
+    case 'best': return '最佳';
+    case 'good': return '良好';
+    case 'suspect': return '可疑';
+    case 'mistake': return '失误';
+    case 'blunder': return '严重失误';
+    case 'global': return '全局最优';
+  }
+}
+
+/* ============ 棋子名（右栏标题用） ============ */
+
+const XQ_NAME: Record<string, string> = {
+  K: '帅', A: '仕', E: '相', H: '马', R: '车', C: '炮', P: '兵',
+  k: '将', a: '士', e: '象', h: '马', r: '车', c: '炮', p: '卒',
 };
 
-export const gradeLabel = (g: Grade): string => GRADE_LABEL[g];
-
-/** 坐标 → 走法文本（象棋用「炮二平五」式；国象用 Bc4；围棋用 D4） */
-export function moveText(kind: GameKind, b: BoardMatrix, mv: Move): string {
-  const CN_NUM = ['一', '二', '三', '四', '五', '六', '七', '八', '九'];
-  if (kind === 'go') {
-    const letters = 'ABCDEFGHJKLMNOPQRST';
-    return `${letters[mv.to.col] ?? '?'}${19 - mv.to.row}`;
+export function pieceTitle(kind: GameKind, cell: string | null): string {
+  if (!cell) return '当前局面';
+  const [side, name] = cell.split(':');
+  if (kind === 'go') return side === 'white' ? '白棋该怎么走' : '黑棋该怎么走';
+  if (kind === 'chess') {
+    const map: Record<string, string> = { K: '王', Q: '后', R: '车', B: '象', N: '马', P: '兵' };
+    return `${map[name] ?? name}该怎么走`;
   }
-  if (kind === 'xiangqi' && mv.from) {
-    const piece = kindOf(b[mv.from.row][mv.from.col]);
-    const isRed = sideOf(b[mv.from.row][mv.from.col]) === 'red';
-    const file = (c: number) => (isRed ? CN_NUM[8 - c] : CN_NUM[c]);
-    const dr = mv.to.row - mv.from.row;
-    const dc = mv.to.col - mv.from.col;
-    const action = dr === 0 ? '平' : dr < 0 ? (isRed ? '进' : '退') : isRed ? '退' : '进';
-    const target = dr === 0 ? file(mv.to.col) : Math.abs(dr) === 1 ? file(mv.to.col) : CN_NUM[Math.abs(dr) - 1];
-    return `${piece}${file(mv.from.col)}${action}${target}`;
-  }
-  if (kind === 'chess' && mv.from) {
-    const piece = kindOf(b[mv.from.row][mv.from.col]);
-    const files = 'abcdefgh';
-    return `${piece === 'P' ? '' : piece}${files[mv.to.col]}${8 - mv.to.row}`;
-  }
-  return `${mv.from ? `${mv.from.row},${mv.from.col}` : ''}→${mv.to.row},${mv.to.col}`;
+  return `${XQ_NAME[name] ?? name}该怎么走`;
 }
 
-const TAG_POOL = ['[威胁]', '[抢占中心]', '[捉子]', '[发展]', '[防守]', '[主动]'];
+/* ============ 本地模拟引擎（浏览器演示） ============ */
 
-function pickTag(seed: number): string {
-  return TAG_POOL[seed % TAG_POOL.length];
+const VAL: Record<string, number> = {
+  K: 0, A: 200, E: 200, H: 400, R: 900, C: 450, P: 100,
+  Q: 900, B: 330, N: 320,
+};
+
+function material(board: BoardMatrix, kind: GameKind): number {
+  let red = 0;
+  let black = 0;
+  for (const row of board) {
+    for (const cell of row) {
+      if (!cell) continue;
+      const [side, name] = cell.split(':');
+      const v = kind === 'go' ? 1 : (VAL[name.toUpperCase()] ?? 0);
+      if (side === 'white' || side === 'red') red += v;
+      else black += v;
+    }
+  }
+  return red - black;
 }
 
-/** 生成候选与变化树（模拟引擎；真实引擎接入后由后端替换） */
-export function buildPreview(
+function evalFor(board: BoardMatrix, kind: GameKind, side: Side): number {
+  const m = material(board, kind);
+  return side === 'white' || side === 'red' ? m : -m;
+}
+
+/** 把 Move 转成可读着法名（简化：象棋用「起点→终点」式描述，国象用坐标） */
+export function moveName(kind: GameKind, board: BoardMatrix, mv: Move): string {
+  const cell = mv.from ? board[mv.from.row]?.[mv.from.col] : null;
+  const files = 'abcdefghij';
+  const to = `${files[mv.to.col] ?? '?'}${(kind === 'xiangqi' ? 10 : 8) - mv.to.row}`;
+  if (kind === 'go') return `${'ABCDEFGHJKLMNOPQRST'[mv.to.col] ?? '?'}${19 - mv.to.row}`;
+  if (!cell) return to;
+  const [, name] = cell.split(':');
+  if (kind === 'chess') {
+    const map: Record<string, string> = { K: 'K', Q: 'Q', R: 'R', B: 'B', N: 'N', P: '' };
+    return `${map[name] ?? name}${to}`;
+  }
+  return `${XQ_NAME[name] ?? name}→${to}`;
+}
+
+function localPreview(
   kind: GameKind,
   board: BoardMatrix,
   side: Side,
-  mv: Move,
+  chosen: Move,
   difficulty: Difficulty,
 ): PreviewResult {
-  const base = material(board, side);
-  const all: CandidateEval[] = [];
-
-  const consider = (m: Move) => {
-    const after = applyMove(kind, board, m, side);
-    const gain = material(after, side) - base;
-    all.push({ move: m, san: moveText(kind, board, m), loss: 0, grade: 'best', global: false });
-    // 用「对方最佳回应后的净收益」作为评分依据
-    const opp = side === 'white' ? 'black' : side === 'red' ? 'black' : 'white';
-    let worst = 0;
-    for (let r = 0; r < after.length; r++) {
-      for (let c = 0; c < after[r].length; c++) {
-        const cell = after[r][c];
-        if (!cell || sideOf(cell) !== opp) continue;
-        for (const t of legalTargets(kind, after, { row: r, col: c }, opp)) {
-          const reply = applyMove(kind, after, { from: { row: r, col: c }, to: t }, opp);
-          worst = Math.min(worst, material(reply, side) - base);
-        }
-      }
-    }
-    const score = Math.min(gain, worst);
-    all[all.length - 1].loss = Math.max(0, Math.round((base + 0 - (base + score)) * -1));
-    return score;
-  };
-
-  // 候选：本次点击走法 + 其它合法走法（最多 5 个）
-  const scores = new Map<string, number>();
-  const key = (m: Move) => `${m.from?.row},${m.from?.col}->${m.to.row},${m.to.col}`;
-  scores.set(key(mv), consider(mv));
-
-  if (mv.from) {
-    const others = legalTargets(kind, board, mv.from, side)
-      .filter((t) => t.row !== mv.to.row || t.col !== mv.to.col)
-      .slice(0, 4);
-    for (const t of others) consider({ from: mv.from, to: t });
-  }
-
-  const best = Math.max(...all.map((c) => scores.get(key(c.move)) ?? 0));
-  for (const c of all) {
-    const s = scores.get(key(c.move)) ?? 0;
-    c.loss = Math.max(0, Math.round((best - s) * 10));
-    c.grade = gradeOf(c.loss);
-    c.global = s === best;
-  }
-  all.sort((a, b2) => a.loss - b2.loss);
-  if (all[0]) all[0].grade = 'global';
-
-  // 难度：入门给 5 个、进阶 3 个、挑战 1 个
   const keep = difficulty === 'beginner' ? 5 : difficulty === 'challenge' ? 1 : 3;
-  const candidates = all.slice(0, keep);
+  const base = evalFor(board, kind, side);
+  const all = allLegalMoves(kind, board, side);
 
-  const clicked = all.find((c) => key(c.move) === key(mv)) ?? all[0];
-  const tree = buildTree(kind, board, side, mv, clicked.loss);
-  const verdict =
-    clicked.grade === 'blunder'
-      ? '这步给了对手机会——看右侧变化树，对手会这样惩罚你。'
-      : clicked.grade === 'mistake'
-        ? '这步有问题，对手有更强的应对。'
-        : clicked.grade === 'suspect'
-          ? '这步可下，但对手有更积极的回应。'
-          : '这步不错，可以确认落子。';
-
-  return { candidates, tree, verdict };
-}
-
-function buildTree(kind: GameKind, board: BoardMatrix, side: Side, mv: Move, loss: number): VariationNode[] {
-  const after = applyMove(kind, board, mv, side);
-  const opp: Side = side === 'white' ? 'black' : side === 'red' ? 'black' : 'white';
-  const replies: { move: Move; score: number }[] = [];
-  for (let r = 0; r < after.length; r++) {
-    for (let c = 0; c < after[r].length; c++) {
-      const cell = after[r][c];
-      if (!cell || sideOf(cell) !== opp) continue;
-      for (const t of legalTargets(kind, after, { row: r, col: c }, opp)) {
-        const m: Move = { from: { row: r, col: c }, to: t };
-        const score = material(applyMove(kind, after, m, opp), opp);
-        replies.push({ move: m, score });
-      }
-    }
-  }
-  replies.sort((a, b) => b.score - a.score);
-  const top = replies.slice(0, 3);
-
-  return top.map((rep, i) => {
-    const san = moveText(kind, after, rep.move);
-    const node: VariationNode = { move: san, tag: pickTag(i + Math.round(loss / 60)) };
-    const afterReply = applyMove(kind, after, rep.move, opp);
-    const mine: { move: Move; score: number }[] = [];
-    for (let r = 0; r < afterReply.length; r++) {
-      for (let c = 0; c < afterReply[r].length; c++) {
-        const cell = afterReply[r][c];
-        if (!cell || sideOf(cell) !== side) continue;
-        for (const t of legalTargets(kind, afterReply, { row: r, col: c }, side)) {
-          const m: Move = { from: { row: r, col: c }, to: t };
-          mine.push({ move: m, score: material(applyMove(kind, afterReply, m, side), side) });
-        }
-      }
-    }
-    mine.sort((a, b) => b.score - a.score);
-    if (mine[0]) {
-      node.reply = moveText(kind, afterReply, mine[0].move);
-      node.replyTag = pickTag(i + 3);
-    }
-    return node;
+  const scored = all.map((mv) => {
+    const after = applyMove(kind, board, mv, side);
+    const cap = mv.from ? board[mv.to.row]?.[mv.to.col] : null;
+    const gain = cap ? (VAL[cap.split(':')[1].toUpperCase()] ?? 0) : 0;
+    const next = evalFor(after, kind, side);
+    return { mv, score: next - base + gain };
   });
+  scored.sort((a, b) => b.score - a.score);
+  const best = scored[0]?.score ?? 0;
+
+  const candidates: CandidateEval[] = scored.slice(0, Math.max(keep, 3)).map((s, i) => {
+    const loss = Math.max(0, best - s.score);
+    return {
+      move: s.mv,
+      san: moveName(kind, board, s.mv),
+      loss,
+      grade: i === 0 ? 'best' : gradeOf(loss),
+      global: i === 0,
+      score: s.score,
+    };
+  });
+
+  const chosenScore = scored.find((s) => s.mv.to.row === chosen.to.row && s.mv.to.col === chosen.to.col)?.score ?? best;
+  const chosenLoss = Math.max(0, best - chosenScore);
+
+  // 对方最强应对（模拟：对方最优吃子/推进）
+  const opp = otherSide(side);
+  const oppBoard = applyMove(kind, board, chosen, side);
+  const oppMoves = allLegalMoves(kind, oppBoard, opp);
+  const oppLine: VariationNode[] = oppMoves.slice(0, 3).map((mv, i) => ({
+    who: 'opp',
+    san: moveName(kind, oppBoard, mv),
+    tag: i === 0 ? '威胁' : '防守',
+    grade: i === 0 ? 'best' : 'good',
+    score: 0,
+  }));
+
+  const line: VariationNode[] = [];
+  oppLine.forEach((n, i) => {
+    line.push(n);
+    const mine = candidates[i + 1];
+    if (mine) line.push({ who: 'me', san: mine.san, grade: mine.grade, score: mine.score });
+  });
+
+  const verdict =
+    chosenLoss <= 30
+      ? '这是当前局面上最有力的选择'
+      : chosenLoss <= 80
+        ? '这步棋可行，但还有更好的选择'
+        : '这步棋给了对手机会，建议换一个走法';
+
+  const better =
+    chosenLoss > 30 && candidates[0]
+      ? { san: candidates[0].san, delta: Math.round(chosenLoss) }
+      : null;
+
+  return { candidates, line, verdict, better, winrate: null };
 }
 
-/* ---------------- 对外 API ---------------- */
+/* ============ 对外 API ============ */
 
 export const api = {
-  /** 假设推演：不落子，只出变化树 */
   async preview(
     kind: GameKind,
     board: BoardMatrix,
@@ -234,70 +195,72 @@ export const api = {
   ): Promise<PreviewResult> {
     if (isTauri()) {
       try {
-        return await invoke<PreviewResult>('preview_move', { kind, move: mv, difficulty });
+        const r = await invoke<{
+          candidates: { move_str: string; loss_cp: number; grade: string; eval_cp?: number }[];
+          root: { mv: string; tags?: string[] }[];
+        }>('get_variations', {
+          kind,
+          gameId: 'local',
+          mv,
+          difficulty,
+        });
+        const candidates: CandidateEval[] = r.candidates.map((c, i) => ({
+          move: mv,
+          san: c.move_str,
+          loss: c.loss_cp,
+          grade: (c.grade as Grade) ?? gradeOf(c.loss_cp),
+          global: i === 0,
+          score: c.eval_cp,
+        }));
+        const best = candidates[0];
+        return {
+          candidates,
+          line: (r.root ?? []).map((n, i) => ({ who: i % 2 === 0 ? 'opp' : 'me', san: n.mv, grade: 'good' as Grade })),
+          verdict: best && best.loss <= 30 ? '这是当前局面上最有力的选择' : '这步棋给了对手机会，建议换一个走法',
+          better: best && best.loss > 30 ? { san: best.san, delta: best.loss } : null,
+          winrate: null,
+        };
       } catch {
-        /* 引擎异常 → 本地模拟兜底，保证交互不中断 */
+        /* 落到本地模拟 */
       }
     }
-    return buildPreview(kind, board, side, mv, difficulty);
+    return localPreview(kind, board, side, mv, difficulty);
   },
 
-  /** 确认落子 */
-  async confirm(kind: GameKind, board: BoardMatrix, side: Side, mv: Move): Promise<BoardMatrix> {
-    if (isTauri()) {
+  async coach(kind: GameKind, context: string, settings: AiSettings): Promise<CoachText> {
+    if (settings.apiKey && settings.baseUrl) {
       try {
-        const r = await invoke<{ labels: BoardMatrix }>('confirm_move', { kind, move: mv });
-        if (r?.labels) return r.labels;
-      } catch {
-        /* 降级本地 */
-      }
-    }
-    return applyMove(kind, board, mv, side);
-  },
-
-  async undo(kind: GameKind, board: BoardMatrix): Promise<BoardMatrix> {
-    if (isTauri()) {
-      try {
-        const r = await invoke<{ labels: BoardMatrix }>('undo_move', { kind });
-        if (r?.labels) return r.labels;
-      } catch {
-        /* 降级本地 */
-      }
-    }
-    return board;
-  },
-
-  /** 逐手复盘 */
-  async review(kind: GameKind, board: BoardMatrix, side: Side): Promise<ReviewItem[]> {
-    if (isTauri()) {
-      try {
-        const r = await invoke<{ moves: ReviewItem[] }>('review_game', { kind });
-        if (r?.moves) return r.moves;
+        const res = await fetch(`${settings.baseUrl.replace(/\/$/, '')}/chat/completions`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${settings.apiKey}` },
+          body: JSON.stringify({
+            model: settings.model || 'doubao-1.5-pro',
+            messages: [
+              { role: 'system', content: '你是中国象棋/国际象棋/围棋教练，只基于给定引擎结论讲解，不编造棋理。' },
+              { role: 'user', content: context },
+            ],
+            stream: false,
+          }),
+        });
+        if (res.ok) {
+          const data = (await res.json()) as { choices?: { message?: { content?: string } }[] };
+          const text = data.choices?.[0]?.message?.content;
+          if (text) return { text, degraded: false };
+        }
       } catch {
         /* 降级 */
       }
     }
+    return { degraded: true, text: `（本地基础提示）${context}` };
+  },
+
+  async review(kind: GameKind, history: Move[], board: BoardMatrix, side: Side): Promise<ReviewItem[]> {
+    void kind;
+    void history;
+    void board;
+    void side;
     return [];
   },
-
-  /** AI 棋理讲解（未配置 Key 时降级基础提示） */
-  async coach(settings: AiSettings, mode: 'position' | 'piece', context: string): Promise<CoachText> {
-    if (!settings.baseUrl || !settings.apiKey || !settings.model) {
-      return {
-        degraded: true,
-        text:
-          mode === 'position'
-            ? 'AI 服务未配置，已降级为基础提示：先看对方刚走那步的意图，再点自己的棋子查看引擎给出的最佳走法。'
-            : 'AI 服务未配置，已降级为基础提示：这枚棋子的最佳走法由引擎给出，先看变化树里对方的最强应对。',
-      };
-    }
-    if (isTauri()) {
-      try {
-        return await invoke<CoachText>('get_coaching', { mode, context });
-      } catch {
-        /* 降级 */
-      }
-    }
-    return { degraded: true, text: `（本地演示）${context}` };
-  },
 };
+
+export { SIZE };

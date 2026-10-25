@@ -290,3 +290,21 @@ export function applyMove(kind: GameKind, b: BoardMatrix, mv: Move, side: Side):
 
 export const otherSide = (s: Side): Side =>
   s === 'red' || s === 'white' ? (s === 'red' ? 'black' : 'black') : 'red';
+
+/** 某方全部合法着法（UI 与模拟引擎共用） */
+export function allLegalMoves(kind: GameKind, b: BoardMatrix, side: Side): Move[] {
+  const { rows, cols } = SIZE[kind];
+  const out: Move[] = [];
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const cell = b[r][c];
+      if (!cell) continue;
+      const owner = sideOf(cell);
+      if (owner !== side) continue;
+      for (const to of legalTargets(kind, b, { row: r, col: c }, side)) {
+        out.push({ from: { row: r, col: c }, to, drop: false, promotion: null });
+      }
+    }
+  }
+  return out;
+}

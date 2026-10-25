@@ -1,100 +1,126 @@
-/** 棋谱教学（514 局六类）与残局挑战（10 排局）抽屉 */
-import { useState } from 'react';
+/** 棋谱教学（444 局真实棋谱·六类）与残局挑战（10 个真实排局）抽屉 */
+import { useMemo, useState } from 'react';
+import studyData from '../data/study.json';
+import endgameData from '../data/endgames.json';
+import type { Move, Pos } from '../core/types';
+
+interface StudyGame {
+  id: string;
+  name: string;
+  category: string;
+  moves: string[];
+  result?: string;
+}
+
+interface Endgame {
+  id: string;
+  name: string;
+  goal: string;
+  fen: string;
+}
 
 const CATEGORIES = ['启蒙', '开局', '中局', '杀法', '战术', '残局'] as const;
 
-/** 说明：原文为「514 局，六类」，此处提供分类骨架与示例条目；
- *  完整 514 局棋谱数据需从原项目导入（见 SPEC-V2 §5）。 */
-const SAMPLE_STUDY: Record<(typeof CATEGORIES)[number], string[]> = {
-  启蒙: ['当头炮开局示范', '屏风马应对示范'],
-  开局: ['中炮对屏风马', '顺炮直车对横车'],
-  中局: ['中路突破范例', '侧翼牵制范例'],
-  杀法: ['双车错杀法', '马后炮杀法'],
-  战术: ['捉双战术', '弃子引离战术'],
-  残局: ['单车例胜单士', '马兵例胜单士'],
-};
+const STUDY: StudyGame[] = studyData as StudyGame[];
+const ENDGAMES: Endgame[] = endgameData as Endgame[];
 
-const ENDGAMES = [
-  { name: '野马操田', goal: '红方胜' },
-  { name: '七星聚会', goal: '红方胜' },
-  { name: '蚯蚓降龙', goal: '红方胜' },
-  { name: '千里独行', goal: '和棋' },
-  { name: '火烧连营', goal: '红方胜' },
-  { name: '大九连环', goal: '和棋' },
-  { name: '小征东', goal: '红方胜' },
-  { name: '带子入朝', goal: '红方胜' },
-  { name: '炮打两狼关', goal: '红方胜' },
-  { name: '车马临门', goal: '红方胜' },
-];
+/** ICCS 着法（如 h2e2）→ Move；象棋 rank 0 为红方底线 */
+export function iccsToMove(iccs: string): Move | null {
+  if (!/^[a-i][0-9][a-i][0-9]$/.test(iccs)) return null;
+  const p = (f: string, r: string): Pos => ({
+    col: f.charCodeAt(0) - 97,
+    row: 9 - Number(r),
+  });
+  return {
+    from: p(iccs[0], iccs[1]),
+    to: p(iccs[2], iccs[3]),
+    drop: false,
+    promotion: null,
+  };
+}
 
-export function StudyDrawer({ onClose }: { onClose: () => void }) {
+export function StudyDrawer({
+  onClose,
+  onPick,
+}: {
+  onClose: () => void;
+  onPick: (game: StudyGame) => void;
+}) {
   const [cat, setCat] = useState<(typeof CATEGORIES)[number]>('开局');
+  const list = useMemo(() => STUDY.filter((g) => g.category === cat).slice(0, 60), [cat]);
+  const counts = useMemo(() => {
+    const m: Record<string, number> = {};
+    for (const g of STUDY) m[g.category] = (m[g.category] ?? 0) + 1;
+    return m;
+  }, []);
+
   return (
-    <div className="modal-mask" onClick={onClose}>
-      <div className="modal drawer" onClick={(e) => e.stopPropagation()}>
-        <h3>棋谱教学 · 514 局六类</h3>
-        <nav className="tabs">
-          {CATEGORIES.map((c) => (
-            <button key={c} type="button" className={`tab-btn ${cat === c ? 'active' : ''}`} onClick={() => setCat(c)}>
-              {c}
-            </button>
-          ))}
-        </nav>
-        <ul className="list">
-          {SAMPLE_STUDY[cat].map((name) => (
-            <li key={name} className="list-row">
-              <span>{name}</span>
-              <button className="btn btn-ghost" type="button">
-                打谱
-              </button>
-            </li>
-          ))}
-        </ul>
-        <p className="muted">
-          打谱时会校验「和原谱不一致，要不要回到原谱」，并支持从任意局面「开始训练」。
-          完整 514 局棋谱数据待从原项目导入（见 SPEC-V2 §5）。
-        </p>
-        <div className="row-actions">
-          <button className="btn btn-ghost" type="button" onClick={onClose}>
+    <div className="drawer-mask" onClick={onClose}>
+      <div className="drawer" onClick={(e) => e.stopPropagation()}>
+        <div className="drawer-head">
+          <h3>棋谱教学</h3>
+          <span className="muted">共 {STUDY.length} 局 · 六类</span>
+          <button className="btn btn-ghost" onClick={onClose}>
             关闭
           </button>
         </div>
+        <div className="drawer-tabs">
+          {CATEGORIES.map((c) => (
+            <button
+              key={c}
+              className={`chip ${cat === c ? 'chip-on' : ''}`}
+              onClick={() => setCat(c)}
+            >
+              {c} {counts[c] ?? 0}
+            </button>
+          ))}
+        </div>
+        <ul className="drawer-list">
+          {list.map((g) => (
+            <li key={g.id}>
+              <button className="drawer-item" onClick={() => onPick(g)}>
+                <span className="drawer-item-name">{g.name}</span>
+                <span className="muted">{g.moves.length} 手</span>
+              </button>
+            </li>
+          ))}
+          {list.length === 0 && <li className="muted">该类暂无棋谱</li>}
+        </ul>
       </div>
     </div>
   );
 }
 
-export function EndgameDrawer({ onClose, onLoad }: { onClose: () => void; onLoad: (fen: string) => void }) {
-  const [fen, setFen] = useState('');
+export function EndgameDrawer({
+  onClose,
+  onPick,
+}: {
+  onClose: () => void;
+  onPick: (fen: string, name: string) => void;
+}) {
   return (
-    <div className="modal-mask" onClick={onClose}>
-      <div className="modal drawer" onClick={(e) => e.stopPropagation()}>
-        <h3>残局挑战 · 10 个经典排局</h3>
-        <ul className="list">
+    <div className="drawer-mask" onClick={onClose}>
+      <div className="drawer" onClick={(e) => e.stopPropagation()}>
+        <div className="drawer-head">
+          <h3>残局挑战</h3>
+          <span className="muted">{ENDGAMES.length} 个排局</span>
+          <button className="btn btn-ghost" onClick={onClose}>
+            关闭
+          </button>
+        </div>
+        <ul className="drawer-list">
           {ENDGAMES.map((e) => (
-            <li key={e.name} className="list-row">
-              <span>
-                {e.name} <em className="tag">[{e.goal}]</em>
-              </span>
-              <button className="btn btn-ghost" type="button" onClick={() => onLoad(e.name)}>
-                开始
+            <li key={e.id}>
+              <button className="drawer-item" onClick={() => onPick(e.fen, e.name)}>
+                <span className="drawer-item-name">{e.name}</span>
+                <span className="muted">{e.goal}</span>
               </button>
             </li>
           ))}
         </ul>
-        <label className="fen-input">
-          自定义残局（粘贴 FEN）
-          <input value={fen} onChange={(e) => setFen(e.target.value)} placeholder="如 3k5/9/9/9/9/9/9/9/9/4K4 w" />
-        </label>
-        <div className="row-actions">
-          <button className="btn btn-ghost" type="button" onClick={onClose}>
-            关闭
-          </button>
-          <button className="btn btn-primary" type="button" disabled={!fen.trim()} onClick={() => onLoad(fen.trim())}>
-            载入局面
-          </button>
-        </div>
-        <p className="muted">排局 FEN 数据待补；载入后走错会提示引擎给出的最佳应对。</p>
+        <p className="muted">
+          排局 FEN 来自开源棋谱库 `weiyinfu/xqp` 的「残局」目录，经 cchess 解析校验。
+        </p>
       </div>
     </div>
   );
