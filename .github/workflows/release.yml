@@ -112,17 +112,18 @@ jobs:
         run: |
           set -e
           sudo apt-get update -qq && sudo apt-get install -y -qq p7zip-full
-          curl -sL -o /tmp/pika.7z https://github.com/official-pikafish/Pikafish/releases/download/Pikafish-2026-09-06/Pikafish.2026-09-06.7z
-          7z x -y -o/tmp/pika /tmp/pika.7z > /dev/null
-          MK=$(find /tmp/pika -name 'Makefile' -o -name 'makefile' | head -1)
-          echo "makefile: $MK"
-          test -n "$MK" || { echo "::error::未找到 pikafish Makefile"; find /tmp/pika -maxdepth 3 -type d; exit 1; }
-          cd "$(dirname "$MK")"
-          make -j4 build ARCH=x86-64 COMP=gcc 2>&1 | tail -3
-          mkdir -p "$GITHUB_WORKSPACE/src-tauri/resources/engine"
-          cp pikafish "$GITHUB_WORKSPACE/src-tauri/resources/engine/pikafish"
-          chmod +x "$GITHUB_WORKSPACE/src-tauri/resources/engine/pikafish"
-          ls -l "$GITHUB_WORKSPACE/src-tauri/resources/engine"
+          git clone --depth 1 https://github.com/official-pikafish/Pikafish /tmp/pika-src
+          curl -sL -o /tmp/nnue.7z https://github.com/official-pikafish/Pikafish/releases/download/Pikafish-2026-09-06/Pikafish.2026-09-06.7z || true
+          7z x -y -o/tmp/nnue /tmp/nnue.7z > /dev/null 2>&1 || true
+          NNUE=$(find /tmp/nnue -name '*.nnue' | head -1 || true)
+          echo "nnue: $NNUE"
+          cd /tmp/pika-src/src
+          make -j4 build ARCH=x86-64 COMP=gcc 2>&1 | tail -5
+          OUT="$GITHUB_WORKSPACE/src-tauri/resources/engine"
+          mkdir -p "$OUT"
+          cp pikafish "$OUT/pikafish" && chmod +x "$OUT/pikafish"
+          if [ -n "$NNUE" ]; then cp "$NNUE" "$OUT/pikafish.nnue"; fi
+          ls -l "$OUT"
 
       - name: Build Tauri desktop app
         if: steps.readiness.outputs.ready == 'true'
@@ -226,21 +227,24 @@ jobs:
         run: |
           set -e
           sudo apt-get update -qq && sudo apt-get install -y -qq p7zip-full
-          curl -sL -o /tmp/pika.7z https://github.com/official-pikafish/Pikafish/releases/download/Pikafish-2026-09-06/Pikafish.2026-09-06.7z
-          7z x -y -o/tmp/pika /tmp/pika.7z > /dev/null
-          MK=$(find /tmp/pika -name 'Makefile' -o -name 'makefile' | head -1)
-          echo "makefile: $MK"
-          test -n "$MK" || { echo "::error::未找到 pikafish Makefile"; find /tmp/pika -maxdepth 3 -type d; exit 1; }
-          cd "$(dirname "$MK")"
+          # 源码走 git（release 的 7z 里只有 Wiki 文档，没有源码）
+          git clone --depth 1 https://github.com/official-pikafish/Pikafish /tmp/pika-src
+          # NNUE 权重从 release 取
+          curl -sL -o /tmp/nnue.7z https://github.com/official-pikafish/Pikafish/releases/download/Pikafish-2026-09-06/Pikafish.2026-09-06.7z || true
+          7z x -y -o/tmp/nnue /tmp/nnue.7z > /dev/null 2>&1 || true
+          NNUE=$(find /tmp/nnue -name '*.nnue' | head -1 || true)
+          echo "nnue: $NNUE"
+          cd /tmp/pika-src/src
           NDK_BIN="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin"
           make -j4 build ARCH=armv8 COMP=clang \
             CC="$NDK_BIN/aarch64-linux-android24-clang" \
             CXX="$NDK_BIN/aarch64-linux-android24-clang++" \
-            STRIP="$NDK_BIN/llvm-strip" 2>&1 | tail -5
+            STRIP="$NDK_BIN/llvm-strip" 2>&1 | tail -8
           ls -l pikafish
-          DEST="../../gen/android/app/src/main/jniLibs/arm64-v8a"
+          DEST="$GITHUB_WORKSPACE/src-tauri/gen/android/app/src/main/jniLibs/arm64-v8a"
           mkdir -p "$DEST"
           cp pikafish "$DEST/libpikafish.so"
+          if [ -n "$NNUE" ]; then cp "$NNUE" "$DEST/pikafish.nnue"; fi
           ls -l "$DEST"
 
       - name: Build Android APK (debug, aarch64)
