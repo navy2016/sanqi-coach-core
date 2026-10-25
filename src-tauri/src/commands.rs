@@ -133,6 +133,37 @@ fn engine_candidates(
     let dir = app.path().app_data_dir().ok()?;
 
     if kind == GameKind::Go {
+        // 优先 KataGo（GTP）；模型与二进制由 bootstrap 释放到 app data
+        if let Ok(kata) = crate::engine::analysis::bootstrap(EngineKind::KataGo, &dir) {
+            let model = dir.join("kata_model.bin.gz");
+            // 需真实着法历史才能让 KataGo 复现局面；历史未接入时走 MCTS 兜底
+            if model.exists() && !snap.history.is_empty() {
+                let hist: Vec<String> = snap
+                    .history
+                    .iter()
+                    .filter_map(|m| crate::engine::analysis::move_to_gtp(kind, m))
+                    .collect();
+                if let Ok(list) = crate::engine::analysis::analyze_kata(&kata, &model, &hist, 800, keep) {
+                    let best = list.first()?.winrate;
+                    let out: Vec<CandidateEval> = list
+                        .iter()
+                        .map(|c| {
+                            let loss = (((best - c.winrate) * 1000.0).round() as i32).max(0);
+                            CandidateEval {
+                                move_str: c.gtp.clone(),
+                                loss_cp: loss,
+                                grade: Grade::from_loss(loss),
+                                is_best: false,
+                                eval_cp: Some((c.winrate * 1000.0) as i32),
+                                best_reply: None,
+                                pv_lines: vec![c.gtp.clone()],
+                            }
+                        })
+                        .collect();
+                    return Some(out);
+                }
+            }
+        }
         use crate::engine::go_mcts::{self, Board, Stone};
         let rows: Vec<Vec<Option<char>>> = snap
             .board

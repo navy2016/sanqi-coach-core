@@ -275,3 +275,130 @@ pub fn analyze_multipv(
     }
     Ok(out)
 }
+
+// ============ KataGo（围棋）GTP 分析 ============
+// 走 GTP 协议：boardsize / komi / play / kata-analyze，解析候选着法胜率。
+// 模型文件（.bin.gz）与二进制一同随包分发，路径由 bootstrap 释放到 app data。
+
+pub struct KataCandidate {
+    pub gtp: String,
+    pub winrate: f32,
+    pub visits: u32,
+}
+
+/// 用 KataGo 分析当前局面，返回按 visits 降序的候选着法
+pub fn analyze_kata(
+    engine_path: &Path,
+    model_path: &Path,
+    moves: &[String],
+    visits: u32,
+    max_moves: usize,
+) -> CoreResult<Vec<KataCandidate>> {
+    use std::io::{BufRead, BufReader};
+    let mut child = Command::new(engine_path)
+        .arg("gtp")
+        .arg("-model")
+        .arg(model_path)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|e| CoreError::EngineIo(format!("启动 KataGo 失败: {e}")))?;
+    let mut stdin = child.stdin.take().ok_or_else(|| CoreError::EngineIo("stdin".into()))?;
+    let stdout = child.stdout.take().ok_or_else(|| CoreError::EngineIo("stdout".into()))?;
+    let mut send = |s: &str| -> CoreResult<()> {
+        writeln!(stdin, "{s}").map_err(|e| CoreError::EngineIo(e.to_string()))?;
+        stdin.flush().map_err(|e| CoreError::EngineIo(e.to_string()))?;
+        Ok(())
+    };
+    let mut reader = BufReader::new(stdout);
+    let mut read_ok = |reader: &mut BufReader<std::process::ChildStdout>| -> bool {
+        let mut line = String::new();
+        loop {
+            line.clear();
+            match reader.read_line(&mut line) {
+                Ok(0) | Err(_) => return false,
+                Ok(_) => {
+                    let t = line.trim();
+                    if t.is_empty() || t == "=" { continue; }
+                    return t.starts_with('=');
+                }
+            }
+        }
+    };
+
+    send("boardsize 19")?;
+    if !read_ok(&mut reader) { let _ = child.kill(); return Err(CoreError::EngineBadResponse("boardsize".into())); }
+    send("komi 7.5")?;
+    let _ = read_ok(&mut reader);
+    send("kata-set-param maxVisits ")?;
+    let _ = read_ok(&mut reader);
+    for (i, mv) in moves.iter().enumerate() {
+        let color = if i % 2 == 0 { "B" } else { "W" };
+        send(&format!("play {color} {mv}"))?;
+        if !read_ok(&mut reader) { let _ = child.kill(); return Err(CoreError::EngineBadResponse("play".into())); }
+    }
+    send(&format!("kata-analyze interval 100 maxmoves {max_moves}"))?;
+
+    let mut best: HashMap<String, (f32, u32)> = HashMap::new();
+    let deadline = std::time::Instant::now() + std::time::Duration::from_millis(1500 + visits as u64);
+    let mut line = String::new();
+    while std::time::Instant::now() < deadline {
+        line.clear();
+        match reader.read_line(&mut line) {
+            Ok(0) | Err(_) => break,
+            Ok(_) => {}
+        }
+        let t = line.trim();
+        if !t.starts_with("info ") { continue; }
+        let toks: Vec<&str> = t.split_whitespace().collect();
+        let mut i = 0;
+        while i < toks.len() {
+            if toks[i] == "move" {
+                let mv = toks.get(i + 1).copied().unwrap_or("").to_string();
+                let mut wr = 0.5f32;
+                let mut vis = 0u32;
+                let mut j = i + 2;
+                while j + 1 < toks.len() {
+                    match toks[j] {
+                        "winrate" => wr = toks[j + 1].parse().unwrap_or(0.5),
+                        "visits" => vis = toks[j + 1].parse().unwrap_or(0),
+                        _ => {}
+                    }
+                    j += 2;
+                }
+                if !mv.is_empty() && mv != "pass" {
+                    let e = best.entry(mv).or_insert((wr, vis));
+                    if vis > e.1 { *e = (wr, vis); }
+                }
+                i = j;
+            } else {
+                i += 1;
+            }
+        }
+    }
+    let _ = send("quit");
+    let _ = child.wait();
+
+    let mut out: Vec<KataCandidate> = best
+        .into_iter()
+        .map(|(gtp, (winrate, visits))| KataCandidate { gtp, winrate, visits })
+        .collect();
+    out.sort_by(|a, b| b.visits.cmp(&a.visits));
+    out.truncate(max_moves);
+    if out.is_empty() {
+        return Err(CoreError::EngineBadResponse("KataGo 无候选输出".into()));
+    }
+    Ok(out)
+}
+
+/// Move → GTP 坐标（围棋用，如 D4）
+pub fn move_to_gtp(kind: GameKind, mv: &crate::rules::Move) -> Option<String> {
+    if kind != GameKind::Go {
+        return None;
+    }
+    let p = mv.to;
+    let letters = "ABCDEFGHJKLMNOPQRST";
+    let col = letters.chars().nth(p.col)?;
+    Some(format!("{}{}", col, 19 - p.row))
+}

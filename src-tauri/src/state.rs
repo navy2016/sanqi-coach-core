@@ -118,6 +118,7 @@ impl GameStore {
                 status: g.status(),
                 history_len: g.rules().history_len(),
                 legal_moves: g.rules().legal_moves(),
+                history: Vec::new(),
             })
         })
     }
@@ -132,6 +133,7 @@ impl GameStore {
 /// 对局快照（序列化给前端）
 #[derive(Debug, Clone)]
 pub struct GameSnapshot {
+    pub history: Vec<Move>,
     pub board: Vec<Vec<Option<Piece>>>,
     pub turn: Side,
     pub status: GameStatus,
