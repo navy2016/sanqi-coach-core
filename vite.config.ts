@@ -1,19 +1,10 @@
 import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
 
-// Tauri v2 前端构建配置：
-// - base './' 保证打包进 Tauri WebView 时资源相对路径可用
-// - envPrefix 增加 TAURI_ 以兼容 Tauri CLI 注入的环境变量
+// 三棋思维教练 v2：React + TS（对齐原文「Rust 引擎层 + TS 业务层 + React UI 层」）
 export default defineConfig({
-  base: './',
+  plugins: [react()],
   clearScreen: false,
-  envPrefix: ['VITE_', 'TAURI_'],
-  server: {
-    port: 5173,
-    strictPort: false,
-  },
-  build: {
-    outDir: 'dist',
-    target: 'es2020',
-    minify: 'esbuild',
-  },
+  server: { port: 5173, strictPort: true, host: '127.0.0.1' },
+  build: { target: 'es2021', outDir: 'dist', emptyOutDir: true },
 });

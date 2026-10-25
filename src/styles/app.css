@@ -1,60 +1,48 @@
-/* ============================================================
- * 三棋思维教练 · 全局样式与布局
- * PC：棋盘居中偏左 + 右侧讲解/分析面板
- * Android/窄屏：棋盘占主体，底部操作条（蓝色 rgb(75,126,237)）
- * ============================================================ */
-
-@import './tokens.css';
+/* 三棋思维教练 v2 · 像素规格对齐原文插图
+   米白 rgb(247,242,234) / 暖棕棋盘 rgb(192,156,122) / 圆角 8px / 主按钮 rgb(75,126,237) */
+:root {
+  --bg: rgb(247, 242, 234);
+  --bg-alt: rgb(252, 252, 251);
+  --board-wood: rgb(192, 156, 122);
+  --card: #ffffff;
+  --text: #2f2a24;
+  --text-sub: #7a6f63;
+  --accent: rgb(75, 126, 237);
+  --radius: 8px;
+  --shadow: 0 4px 12px rgba(90, 70, 50, 0.1);
+  --gap: 12px;
+}
 
 * { box-sizing: border-box; }
 
-html, body {
+html, body, #root { height: 100%; }
+
+body {
   margin: 0;
-  padding: 0;
-  height: 100%;
   background: var(--bg);
-  color: var(--text-main);
-  font-family: var(--font-main);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Noto Sans CJK SC', 'Microsoft YaHei', sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 
-#app { height: 100%; }
-
-/* ---------- 通用卡片：圆角 8px、居中、轻投影 ---------- */
-.card {
-  background: var(--card-bg);
-  border-radius: var(--card-radius);
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-  border: var(--card-border);
-  padding: var(--gap);
+.app {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+  padding-bottom: 76px;
 }
 
-.card-title {
-  margin: 0 0 8px;
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text-sub);
-  letter-spacing: 0.5px;
-}
-
-/* ---------- 顶部棋种切换标签 ---------- */
+/* ---------- 顶部 ---------- */
 .app-header {
   display: flex;
   align-items: center;
   gap: var(--gap);
-  padding: 10px var(--gap-lg);
-  background: transparent;
   flex-wrap: wrap;
   row-gap: 6px;
+  padding: 10px 16px;
 }
 
-.brand {
-  font-size: 17px;
-  font-weight: 700;
-  color: var(--board-wood-dark);
-  margin-right: auto;
-  white-space: nowrap;
-}
+.brand { font-size: 17px; font-weight: 700; white-space: nowrap; }
 
 .tabs {
   display: flex;
@@ -63,7 +51,6 @@ html, body {
   overflow-x: auto;
   max-width: 100%;
   scrollbar-width: none;
-  -webkit-overflow-scrolling: touch;
 }
 .tabs::-webkit-scrollbar { display: none; }
 
@@ -72,287 +59,255 @@ html, body {
   border: 1px solid rgba(120, 90, 60, 0.25);
   background: #fff;
   color: var(--text-sub);
-  border-radius: var(--radius-pill);
+  border-radius: 999px;
   padding: 6px 16px;
   font-size: 14px;
   cursor: pointer;
-  transition: all 0.15s ease;
   white-space: nowrap;
   flex: 0 0 auto;
+  transition: all 0.15s ease;
 }
-.tab-btn:hover { border-color: var(--accent); color: var(--accent); }
 .tab-btn.active {
   background: var(--accent);
   border-color: var(--accent);
   color: #fff;
   font-weight: 600;
 }
-.tab-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
-/* ---------- 主布局：PC 棋盘居中偏左 + 右侧面板 ---------- */
-.app-main {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(340px, 430px);
-  gap: var(--gap-lg);
-  padding: 0 var(--gap-lg) var(--gap-lg);
-  height: calc(100% - 58px);
+.difficulty-select {
+  appearance: none;
+  border: 1px solid rgba(120, 90, 60, 0.25);
+  background: #fff;
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 14px;
+  color: var(--text);
+  cursor: pointer;
 }
 
-.board-zone {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 0;
+/* ---------- 主体 ---------- */
+.app-main {
+  flex: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 420px);
+  gap: 16px;
+  padding: 0 16px 16px;
+  align-items: start;
 }
 
 .board-wrap {
-  /* 棋盘整体略偏左：右侧面板占据剩余空间 */
-  margin-right: auto;
-  margin-left: 4%;
-  max-width: var(--board-max);
+  background: var(--bg-alt);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 12px;
+  max-width: 640px;
   width: 100%;
+  margin: 0 auto;
 }
 
-.side-panel {
+.board-svg { display: block; width: 100%; height: auto; border-radius: var(--radius); touch-action: manipulation; }
+
+.board-meta {
   display: flex;
-  flex-direction: column;
-  gap: var(--gap);
-  overflow-y: auto;
-  min-height: 0;
-  padding-bottom: 8px;
-}
-
-/* ---------- 操作按钮 ---------- */
-.btn {
-  appearance: none;
-  border: none;
-  border-radius: var(--card-radius);
-  padding: 9px 18px;
-  font-size: 14px;
-  cursor: pointer;
-  transition: background 0.15s ease, transform 0.05s ease;
-  font-family: inherit;
-}
-.btn:active { transform: scale(0.97); }
-.btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.btn:disabled { opacity: 0.45; cursor: not-allowed; }
-
-.btn-primary { background: var(--accent); color: #fff; }
-.btn-primary:hover:not(:disabled) { background: var(--accent-hover); }
-.btn-ghost {
-  background: transparent;
-  color: var(--text-sub);
-  border: 1px solid rgba(120, 90, 60, 0.25);
-}
-.btn-ghost:hover:not(:disabled) { color: var(--accent); border-color: var(--accent); }
-
-.action-bar {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  align-items: center;
-}
-
-/* ---------- AI 讲解面板（流式打字机） ---------- */
-.coach-body {
-  min-height: 96px;
-  max-height: 220px;
-  overflow-y: auto;
-  font-size: 14px;
-  line-height: 1.75;
-  white-space: pre-wrap;
-  color: var(--text-main);
-}
-.coach-caret {
-  display: inline-block;
-  width: 2px;
-  height: 1em;
-  background: var(--accent);
-  margin-left: 2px;
-  vertical-align: text-bottom;
-  animation: blink 0.9s steps(1) infinite;
-}
-@keyframes blink { 50% { opacity: 0; } }
-
-.coach-mode-row { display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
-
-/* ---------- 变化树 ---------- */
-.var-tree { font-size: 13px; line-height: 1.9; }
-.var-node { padding-left: 14px; border-left: 2px solid rgba(120, 90, 60, 0.18); margin-left: 4px; }
-.var-node.root { border-left: none; padding-left: 0; }
-.var-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 3px 8px;
-  border-radius: 6px;
-  cursor: pointer;
-}
-.var-row:hover { background: var(--accent-soft); }
-.var-row.selected { background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--accent); }
-.var-reply { color: var(--text-sub); font-size: 12px; }
-.var-tag {
-  font-size: 11px;
-  padding: 1px 7px;
-  border-radius: var(--radius-pill);
-  background: var(--bg-soft);
-  color: var(--board-wood-dark);
-  flex-shrink: 0;
-}
-.var-empty { color: var(--text-sub); font-size: 13px; padding: 10px 4px; }
-
-/* ---------- 逐手评分列表 ---------- */
-.score-list { display: flex; flex-direction: column; gap: 4px; max-height: 300px; overflow-y: auto; }
-.score-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-height: 40px;
-  padding: 4px 10px;
-  border-radius: 6px;
+  justify-content: space-between;
   font-size: 13px;
-  border: 1px solid transparent;
-}
-.score-row .no { color: var(--text-sub); width: 42px; flex-shrink: 0; font-variant-numeric: tabular-nums; }
-.score-row .mv { font-weight: 600; width: 76px; flex-shrink: 0; }
-.score-row .loss { margin-left: auto; font-variant-numeric: tabular-nums; color: var(--text-sub); }
-.score-row.grade-best { background: var(--grade-best-bg); }
-.score-row.grade-good { background: rgba(75, 126, 237, 0.10); }
-.score-row.grade-suspect { background: rgba(214, 168, 0, 0.12); }
-.score-row.grade-mistake { background: rgba(224, 123, 57, 0.13); }
-.score-row.grade-blunder { background: rgba(214, 69, 69, 0.13); }
-.score-row.grade-global { background: rgba(212, 160, 23, 0.16); box-shadow: inset 0 0 0 1px var(--grade-global); }
-.score-row.turning { box-shadow: inset 0 0 0 2px var(--grade-blunder); }
-.turning-badge {
-  font-size: 11px;
-  color: #fff;
-  background: var(--grade-blunder);
-  border-radius: var(--radius-pill);
-  padding: 1px 8px;
-  flex-shrink: 0;
+  color: var(--text-sub);
+  padding: 8px 4px 0;
 }
 
-.grade-badge {
-  font-size: 12px;
-  font-weight: 600;
-  flex-shrink: 0;
-  width: 62px;
-  text-align: center;
-}
-.grade-badge.best { color: var(--grade-best); }
-.grade-badge.good { color: var(--grade-good); }
-.grade-badge.suspect { color: var(--grade-suspect); }
-.grade-badge.mistake { color: var(--grade-mistake); }
-.grade-badge.blunder { color: var(--grade-blunder); }
-.grade-badge.global { color: var(--grade-global); }
+.side-panel { display: flex; flex-direction: column; gap: 12px; }
 
-/* ---------- 棋盘通用 ---------- */
-.board-svg {
-  display: block;
-  width: 100%;
-  height: auto;
-  border-radius: var(--card-radius);
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-  touch-action: manipulation;
-  user-select: none;
+/* ---------- 卡片 ---------- */
+.card {
+  background: var(--card);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 14px 16px;
 }
-.board-cell { cursor: pointer; }
-.board-cell:focus { outline: none; }
-.hint-dot { pointer-events: none; }
-.last-move-mark { pointer-events: none; }
+.card-title { margin: 0 0 10px; font-size: 15px; font-weight: 700; }
 
-/* ---------- 设置页 ---------- */
-.settings-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(40, 30, 20, 0.35);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 40;
-  padding: 16px;
-}
-.settings-page {
-  background: #fff; /* art2_img5：设置页近纯白 */
-  border-radius: var(--card-radius);
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-  width: min(460px, 100%);
-  max-height: 90vh;
-  overflow-y: auto;
-  padding: var(--gap-lg);
-}
-.settings-page h2 { margin: 0 0 4px; font-size: 18px; }
-.settings-note { font-size: 12px; color: var(--text-sub); margin: 0 0 14px; line-height: 1.6; }
+.muted { color: var(--text-sub); font-size: 13px; line-height: 1.6; margin: 6px 0; }
 
-.field { margin-bottom: 12px; }
-.field label { display: block; font-size: 13px; color: var(--text-sub); margin-bottom: 4px; }
-.field input, .field select {
-  width: 100%;
-  padding: 9px 10px;
-  border: 1px solid rgba(120, 90, 60, 0.3);
-  border-radius: 6px;
-  font-size: 14px;
-  font-family: inherit;
-  background: #fff;
-  color: var(--text-main);
-}
-.field input:focus, .field select:focus {
-  outline: none;
-  border-color: var(--accent);
-  box-shadow: 0 0 0 2px var(--accent-soft);
-}
-.settings-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
-.degrade-tip {
-  font-size: 12px;
-  color: var(--grade-best);
-  background: var(--grade-best-bg);
-  border-radius: 6px;
+.verdict {
+  margin: 8px 0 10px;
   padding: 8px 10px;
+  border-radius: 6px;
+  background: rgba(75, 126, 237, 0.08);
+  font-size: 13px;
   line-height: 1.6;
 }
 
-/* ---------- 空状态 ---------- */
-.empty-state {
-  color: var(--text-sub);
+/* 候选列表 */
+.cand-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+.cand-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 6px;
   font-size: 13px;
-  text-align: center;
-  padding: 18px 8px;
-  line-height: 1.7;
+  background: rgba(0, 0, 0, 0.03);
+}
+.cand-san { font-weight: 600; }
+.cand-grade { margin-left: auto; }
+.cand-loss { color: var(--text-sub); font-size: 12px; }
+
+/* 评级配色（原文：绿/蓝/黄/橙/红/金） */
+.g-best { background: rgba(151, 231, 151, 0.35); }
+.g-good { background: rgba(140, 190, 255, 0.3); }
+.g-suspect { background: rgba(255, 214, 102, 0.35); }
+.g-mistake { background: rgba(255, 160, 90, 0.35); }
+.g-blunder { background: rgba(232, 90, 90, 0.3); }
+.g-global { background: rgba(255, 196, 0, 0.35); }
+
+/* 变化树 */
+.tree { display: flex; flex-direction: column; gap: 8px; margin: 8px 0 12px; }
+.tree-node {
+  border-left: 3px solid rgba(120, 90, 60, 0.25);
+  padding: 4px 0 4px 10px;
+}
+.tree-line { display: flex; gap: 8px; font-size: 13px; line-height: 1.7; }
+.tree-line.reply { padding-left: 14px; color: var(--text-sub); }
+.tree-label { color: var(--text-sub); flex: 0 0 auto; min-width: 52px; }
+.tree-move { font-weight: 600; }
+.tag {
+  font-style: normal;
+  font-size: 11px;
+  color: var(--accent);
+  background: rgba(75, 126, 237, 0.1);
+  border-radius: 4px;
+  padding: 1px 5px;
+  margin-left: 4px;
 }
 
-/* ---------- Android / 窄屏：棋盘占主体 + 底部操作条 ---------- */
+/* 按钮 */
+.row-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+
+.btn {
+  appearance: none;
+  border-radius: 8px;
+  padding: 9px 16px;
+  font-size: 14px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: all 0.15s ease;
+}
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-primary { background: var(--accent); color: #fff; font-weight: 600; }
+.btn-ghost { background: #fff; border-color: rgba(120, 90, 60, 0.25); color: var(--text); }
+.btn-bar {
+  flex: 1;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 600;
+  border-radius: 8px;
+  min-width: 0;
+  padding: 10px 8px;
+  font-size: 14px;
+}
+
+/* 底部操作条 */
+.bottom-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  gap: 8px;
+  padding: 8px 12px calc(8px + env(safe-area-inset-bottom, 0px));
+  background: rgba(247, 242, 234, 0.96);
+  backdrop-filter: blur(6px);
+  border-top: 1px solid rgba(120, 90, 60, 0.12);
+}
+
+/* 讲解 / 复盘 */
+.coach-text { font-size: 14px; line-height: 1.75; margin: 8px 0 0; white-space: pre-wrap; }
+.coach-text.degraded { color: var(--text-sub); }
+.badge {
+  display: inline-block;
+  margin-left: 6px;
+  font-size: 11px;
+  background: rgba(120, 90, 60, 0.12);
+  border-radius: 4px;
+  padding: 1px 6px;
+  vertical-align: middle;
+}
+
+.review-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.review-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  padding: 5px 8px;
+  border-radius: 6px;
+}
+.review-row .ply { color: var(--text-sub); min-width: 58px; }
+.review-row .san { font-weight: 600; }
+.review-row .grade { margin-left: auto; }
+.review-row .loss { color: var(--text-sub); font-size: 12px; }
+.review-row.turning { outline: 1.5px solid rgba(232, 90, 90, 0.6); }
+.summary { font-size: 13px; color: var(--text-sub); margin: 10px 0 0; line-height: 1.7; }
+
+/* 弹窗 */
+.modal-mask {
+  position: fixed;
+  inset: 0;
+  background: rgba(30, 24, 18, 0.42);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  z-index: 30;
+}
+.modal {
+  background: #fff;
+  border-radius: 12px;
+  padding: 18px;
+  width: min(520px, 100%);
+  max-height: 86vh;
+  overflow-y: auto;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.22);
+}
+.modal h3 { margin: 0 0 10px; font-size: 16px; }
+.modal label { display: block; margin: 10px 0; font-size: 13px; color: var(--text-sub); }
+.modal input {
+  display: block;
+  width: 100%;
+  margin-top: 5px;
+  padding: 9px 10px;
+  border: 1px solid rgba(120, 90, 60, 0.25);
+  border-radius: 8px;
+  font-size: 14px;
+  color: var(--text);
+  background: var(--bg-alt);
+}
+
+.list { list-style: none; margin: 10px 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.list-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.03);
+  font-size: 14px;
+}
+.fen-input { display: block; margin-top: 12px; font-size: 13px; color: var(--text-sub); }
+
+/* ---------- 窄屏：单列，棋盘在上 ---------- */
 @media (max-width: 860px) {
   .app-main {
     grid-template-columns: 1fr;
-    grid-template-rows: auto 1fr;
-    height: calc(100% - 58px);
+    padding: 0 10px 16px;
+    gap: 12px;
   }
-  .board-wrap { margin: 0 auto; max-width: min(96vw, 560px); width: 100%; }
-  .side-panel { overflow-y: visible; }
-  .app-header { padding: 8px 12px; }
+  .board-wrap { max-width: min(96vw, 560px); padding: 8px; }
+  .app-header { padding: 8px 10px; }
   .brand { font-size: 15px; }
   .tab-btn { padding: 5px 12px; font-size: 13px; }
-  /* 底部操作条：主操作蓝色，高约 42px（art2_img2） */
-  .bottom-bar {
-    position: fixed;
-    left: 0; right: 0; bottom: 0;
-    display: flex;
-    gap: 8px;
-    padding: 8px 12px calc(8px + env(safe-area-inset-bottom, 0px));
-    background: var(--accent);
-    z-index: 20;
-  }
-  .bottom-bar .btn { flex: 1; min-height: 42px; }
-  .bottom-bar .btn-primary { background: rgba(255, 255, 255, 0.16); }
-  .bottom-bar .btn-ghost { border-color: rgba(255, 255, 255, 0.5); color: #fff; }
-  .app-main { padding-bottom: 76px; }
-}
-
-/* 横屏窄高（Android 横屏三栏：棋盘 + 变化树 + 讲解） */
-@media (max-height: 520px) and (orientation: landscape) {
-  .app-main {
-    grid-template-columns: minmax(0, 1.2fr) minmax(260px, 1fr);
-    height: calc(100% - 52px);
-  }
-  .app-header { padding: 6px var(--gap-lg); }
+  .difficulty-select { padding: 5px 10px; font-size: 13px; }
+  .btn-bar { font-size: 13px; padding: 9px 6px; }
+  .card { padding: 12px; }
 }
