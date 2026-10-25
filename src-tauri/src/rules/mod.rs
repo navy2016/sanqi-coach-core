@@ -3,6 +3,10 @@
 
 use serde::{Deserialize, Serialize};
 
+pub mod chess;
+pub mod go;
+pub mod xiangqi;
+
 /// 游戏种类
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]

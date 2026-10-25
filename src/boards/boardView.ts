@@ -18,6 +18,11 @@ export function svgEl<K extends keyof SVGElementTagNameMap>(tag: K): SVGElementT
 
 export abstract class BaseBoard<P> {
   readonly root: SVGSVGElement;
+  /**
+   * 逻辑坐标系下的格子边长（SVG 用户单位，与屏幕像素解耦）。
+   * 真实显示尺寸完全由 CSS（width:100%; height:auto）+ viewBox 等比缩放决定，
+   * 因此不依赖挂载瞬间的容器宽度（移动端首次挂载宽度可能为 0）。
+   */
   protected cell = 44;
   protected margin = 30;
   protected gridLayer!: SVGGElement;
@@ -26,18 +31,36 @@ export abstract class BaseBoard<P> {
   private state: BoardState<P> = { pieces: [] };
   onClick: ((pos: Pos) => void) | null = null;
 
+  /**
+   * 注意：构造器**不**调用 drawGrid()。
+   * 子类的 cols/rows 常依赖子类字段（如 GoBoard.size），而字段初始化发生在 super() 之后，
+   * 若在基类构造器里读取会得到 undefined → viewBox 变成 "0 0 NaN NaN"（围棋棋盘整块空白）。
+   * 因此改为由子类构造器在自身字段就绪后调用 this.mount()。
+   */
   constructor(protected host: HTMLElement) {
     this.root = svgEl('svg');
     this.root.setAttribute('class', 'board-svg');
     this.root.setAttribute('role', 'img');
+    this.root.setAttribute('preserveAspectRatio', 'xMidYMid meet');
     this.host.appendChild(this.root);
     this.gridLayer = svgEl('g');
     this.pieceLayer = svgEl('g');
     this.hintLayer = svgEl('g');
     this.root.append(this.gridLayer, this.pieceLayer, this.hintLayer);
+    this.bindClicks();
+  }
+
+  /** 子类构造器末尾调用：此时 cols/rows 已可用，建立 viewBox 并绘制网格 */
+  protected mount(): void {
     this.layout();
     this.drawGrid();
-    this.bindClicks();
+    this.syncSizeClass();
+  }
+
+  /** 把逻辑尺寸写到 data 属性，便于 CSS 做宽高比与调试 */
+  private syncSizeClass(): void {
+    this.root.dataset.cols = String(this.cols);
+    this.root.dataset.rows = String(this.rows);
   }
 
   abstract get cols(): number;

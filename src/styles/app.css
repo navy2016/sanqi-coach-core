@@ -44,6 +44,8 @@ html, body {
   gap: var(--gap);
   padding: 10px var(--gap-lg);
   background: transparent;
+  flex-wrap: wrap;
+  row-gap: 6px;
 }
 
 .brand {
@@ -54,7 +56,16 @@ html, body {
   white-space: nowrap;
 }
 
-.tabs { display: flex; gap: 6px; }
+.tabs {
+  display: flex;
+  gap: 6px;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  max-width: 100%;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.tabs::-webkit-scrollbar { display: none; }
 
 .tab-btn {
   appearance: none;
@@ -66,6 +77,8 @@ html, body {
   font-size: 14px;
   cursor: pointer;
   transition: all 0.15s ease;
+  white-space: nowrap;
+  flex: 0 0 auto;
 }
 .tab-btn:hover { border-color: var(--accent); color: var(--accent); }
 .tab-btn.active {
@@ -314,8 +327,11 @@ html, body {
     grid-template-rows: auto 1fr;
     height: calc(100% - 58px);
   }
-  .board-wrap { margin: 0 auto; max-width: min(96vw, 560px); }
+  .board-wrap { margin: 0 auto; max-width: min(96vw, 560px); width: 100%; }
   .side-panel { overflow-y: visible; }
+  .app-header { padding: 8px 12px; }
+  .brand { font-size: 15px; }
+  .tab-btn { padding: 5px 12px; font-size: 13px; }
   /* 底部操作条：主操作蓝色，高约 42px（art2_img2） */
   .bottom-bar {
     position: fixed;

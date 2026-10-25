@@ -43,6 +43,12 @@ export class XiangqiBoard extends BaseBoard<XiangqiPiece> {
 
   private pieces = initPieces();
 
+  constructor(host: HTMLElement) {
+    super(host);
+    // 字段就绪后再建 viewBox 并绘制；基类构造器不再自动绘制
+    this.mount();
+  }
+
   protected pieceAt(p: Pos): XiangqiPiece | null {
     return this.pieces[p.row]?.[p.col] ?? null;
   }

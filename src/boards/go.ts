@@ -10,6 +10,8 @@ export class GoBoard extends BaseBoard<GoStone> {
   constructor(host: HTMLElement, size: 9 | 13 | 19 = 19) {
     super(host);
     this.size = size;
+    // size 就绪后才能算 viewBox；否则 cols/rows 读到 undefined → viewBox "0 0 NaN NaN"
+    this.mount();
   }
 
   get cols(): number { return this.size; }

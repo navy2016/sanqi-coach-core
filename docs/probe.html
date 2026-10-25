@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>UI 布局探针（开发验证用，不参与打包）</title>
+<style>
+  body { font: 12px/1.5 ui-monospace, monospace; margin: 0; padding: 8px; background: #eee; }
+  .frame { display: inline-block; vertical-align: top; margin: 4px; background: #fff; }
+  iframe { border: 1px solid #999; display: block; }
+  pre { white-space: pre-wrap; background: #111; color: #0f0; padding: 8px; margin: 4px; }
+</style>
+</head>
+<body>
+<div class="frame"><div>mobile 390x844</div><iframe id="m" src="/index.html" width="390" height="844"></iframe></div>
+<div class="frame"><div>desktop 1280x800</div><iframe id="d" src="/index.html" width="1280" height="800"></iframe></div>
+<pre id="out">measuring...</pre>
+<script>
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+function boardInfo(win, doc) {
+  const svg = doc.querySelector('.board-svg');
+  if (!svg) return { error: 'no .board-svg' };
+  const vb = svg.getAttribute('viewBox');
+  const grid = svg.querySelector('g:nth-of-type(1)');
+  const pieces = svg.querySelector('g:nth-of-type(2)');
+  const bg = grid ? grid.firstElementChild : null;
+  const bgFill = bg ? win.getComputedStyle(bg).fill : null;
+  const line = grid ? grid.querySelector('line') : null;
+  const lineStroke = line ? win.getComputedStyle(line).stroke : null;
+  const r = svg.getBoundingClientRect();
+  return {
+    viewBox: vb,
+    viewBoxHasNaN: /NaN/.test(vb || ''),
+    attrWH: [svg.getAttribute('width'), svg.getAttribute('height')],
+    cssWH: [win.getComputedStyle(svg).width, win.getComputedStyle(svg).height],
+    rect: { w: Math.round(r.width), h: Math.round(r.height) },
+    gridChildren: grid ? grid.children.length : 0,
+    pieceChildren: pieces ? pieces.children.length : 0,
+    bgFill,
+    lineStroke,
+  };
+}
+
+async function measure(win, doc, name) {
+  const q = (s) => doc.querySelector(s);
+  const box = (el) => {
+    if (!el) return null;
+    const r = el.getBoundingClientRect();
+    return { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height), right: Math.round(r.right), bottom: Math.round(r.bottom) };
+  };
+  const cs = (el, p) => (el ? win.getComputedStyle(el).getPropertyValue(p) : null);
+  const header = q('.app-header');
+  const main = q('.app-main');
+  const bar = q('.bottom-bar');
+  const btns = Array.from(doc.querySelectorAll('.bottom-bar .btn'));
+  const tabs = Array.from(doc.querySelectorAll('.tab-btn'));
+  const side = q('.side-panel');
+  const boards = {};
+  for (const kind of ['xiangqi', 'go', 'chess']) {
+    const btn = doc.querySelector('.tab-btn[data-kind="' + kind + '"]');
+    if (btn) { btn.click(); await sleep(120); }
+    boards[kind] = boardInfo(win, doc);
+  }
+  // 回到象棋做最终截图态
+  const back = doc.querySelector('.tab-btn[data-kind="xiangqi"]');
+  if (back) { back.click(); await sleep(120); }
+  return {
+    name,
+    viewport: { w: win.innerWidth, h: win.innerHeight },
+    horizontalOverflow: doc.documentElement.scrollWidth > win.innerWidth,
+    docScrollWidth: doc.documentElement.scrollWidth,
+    header: box(header),
+    headerFlexWrap: cs(header, 'flex-wrap'),
+    tabBtns: tabs.map((b) => ({ text: b.textContent.trim(), ...box(b), whiteSpace: win.getComputedStyle(b).whiteSpace })),
+    tabsOverflowX: q('.tabs') ? cs(q('.tabs'), 'overflow-x') : null,
+    main: box(main),
+    mainGridColumns: cs(main, 'grid-template-columns'),
+    boardWrap: box(q('.board-wrap')),
+    sidePanel: box(side),
+    bottomBar: box(bar),
+    bottomBtns: btns.map((b) => ({ text: b.textContent.trim(), ...box(b) })),
+    bottomBtnsOverflow: btns.some((b) => { const r = b.getBoundingClientRect(); return r.right > win.innerWidth + 0.5 || r.left < -0.5; }),
+    sidePanelHiddenByBar: !!(side && bar && side.getBoundingClientRect().bottom > bar.getBoundingClientRect().top + 1),
+    bodyBg: win.getComputedStyle(doc.body).backgroundColor,
+    primaryBtnBg: btns[1] ? win.getComputedStyle(btns[1]).backgroundColor : null,
+    boards,
+  };
+}
+
+async function run() {
+  const out = [];
+  for (const [id, name] of [['m', 'mobile-390x844'], ['d', 'desktop-1280x800']]) {
+    const f = document.getElementById(id);
+    try {
+      out.push(await measure(f.contentWindow, f.contentDocument, name));
+    } catch (e) {
+      out.push({ name, error: String(e) });
+    }
+  }
+  document.getElementById('out').textContent = JSON.stringify(out, null, 2);
+}
+window.addEventListener('load', () => setTimeout(run, 1200));
+</script>
+</body>
+</html>
