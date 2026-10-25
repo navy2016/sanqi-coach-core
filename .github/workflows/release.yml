@@ -39,8 +39,9 @@ jobs:
         id: create_tag
         run: |
           TAG="${{ inputs.version }}"
-          if git rev-parse "$TAG" >/dev/null 2>&1; then
-            echo "::notice::tag $TAG 已存在，跳过创建"
+          # 浅克隆下本地没有 tag，必须查远端；否则重复发布会因 tag 已存在而失败
+          if git ls-remote --tags origin "refs/tags/$TAG" | grep -q .; then
+            echo "::notice::tag $TAG 已存在于远端，跳过创建"
           else
             git config user.name "GitHub Actions"
             git config user.email "actions@github.com"
