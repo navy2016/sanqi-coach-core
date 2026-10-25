@@ -8,6 +8,7 @@ use tauri::State;
 use crate::coach::{CandidateEval, ScoredMove, VariationNode};
 use crate::common::error::{CoreError, CoreResult};
 use crate::common::rating::Grade;
+use crate::engine::EngineKind;
 use crate::rules::{GameKind, GameStatus, Move, Piece, PieceKind, Pos, Side};
 use crate::settings::AppSettings;
 use crate::state::{GameSnapshot, GameStore};
