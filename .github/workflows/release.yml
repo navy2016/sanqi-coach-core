@@ -319,7 +319,8 @@ jobs:
           "$NDK_BIN/llvm-strip" --strip-all katago || true
           cp katago "$DEST/libkatago.so"
           # b18c384 网络（约 100MB）
-          curl -sL -o "$DEST/kata_model.bin.gz" https://media.katagotraining.org/uploads/2024/01/13/kata1-b18c384nbt-s9996604416-d4316597426.bin.gz || true
+          curl -fsSL -o "$DEST/kata_model.bin.gz" https://media.katagotraining.org/uploaded/networks/models/kata1/kata1-b18c384nbt-s9996604416-d4316597426.bin.gz
+          test -s "$DEST/kata_model.bin.gz" || { echo "::error::KataGo 模型下载失败"; exit 1; }
           ls -l "$DEST"
 
       - name: Build Android APK (debug, aarch64)
