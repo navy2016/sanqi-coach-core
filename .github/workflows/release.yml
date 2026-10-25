@@ -239,7 +239,8 @@ jobs:
           make -j4 build ARCH=armv8 COMP=clang \
             CC="$NDK_BIN/aarch64-linux-android24-clang" \
             CXX="$NDK_BIN/aarch64-linux-android24-clang++" \
-            STRIP="$NDK_BIN/llvm-strip" 2>&1 | tail -8
+            STRIP="$NDK_BIN/llvm-strip" \
+            LIBS="-latomic" 2>&1 | tail -8
           ls -l pikafish
           DEST="$GITHUB_WORKSPACE/src-tauri/gen/android/app/src/main/jniLibs/arm64-v8a"
           mkdir -p "$DEST"
