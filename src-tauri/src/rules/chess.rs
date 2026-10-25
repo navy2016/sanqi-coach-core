@@ -71,7 +71,8 @@ impl ChessBoard {
                         continue;
                     }
                     let from = Pos::new(r, c);
-                    for mv in self.pseudo_moves_for(from) {
+                    // 注意：这里必须禁用易位分支，否则 attacked → 王走法 → in_check → attacked 无限递归（栈溢出）
+                    for mv in self.pseudo_moves_inner(from, false) {
                         if mv.to == target {
                             return true;
                         }
@@ -90,6 +91,11 @@ impl ChessBoard {
     }
 
     fn pseudo_moves_for(&self, from: Pos) -> Vec<Move> {
+        self.pseudo_moves_inner(from, true)
+    }
+
+    /// allow_castle=false 时跳过易位分支（供 attacked 使用，避免递归）
+    fn pseudo_moves_inner(&self, from: Pos, allow_castle: bool) -> Vec<Move> {
         let pc = match self.get(from) {
             Some(p) => p,
             None => return vec![],
@@ -227,7 +233,7 @@ impl ChessBoard {
                 }
                 // 王车易位：王未动、车未动、中间空、王不在被将状态
                 let home_row = if pc.side == Side::White { 7usize } else { 0usize };
-                if from.row == home_row && from.col == 4 && !self.in_check(pc.side) {
+                if allow_castle && from.row == home_row && from.col == 4 && !self.in_check(pc.side) {
                     let king_moved = self.history.iter().any(|m| {
                         m.from.map(|f| f.row == home_row && f.col == 4).unwrap_or(false)
                     });

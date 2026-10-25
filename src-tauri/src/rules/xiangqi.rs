@@ -407,6 +407,19 @@ impl GameRules for XiangqiBoard {
 mod tests {
     use super::*;
 
+    fn board_with(cells: &[(usize, usize, PieceKind, Side)], side: Side) -> XiangqiBoard {
+        let mut b = XiangqiBoard {
+            board: [[None; COLS]; ROWS],
+            side,
+            history: Vec::new(),
+            status: GameStatus::Ongoing,
+        };
+        for (r, c, k, s) in cells {
+            b.board[*r][*c] = Some(Piece { kind: *k, side: *s });
+        }
+        b
+    }
+
     #[test]
     fn test_initial_position() {
         let b = XiangqiBoard::new();
@@ -425,19 +438,56 @@ mod tests {
 
     #[test]
     fn test_horse_blocked_by_leg() {
-        let b = XiangqiBoard::new();
-        // 初始局面马被自己兵/相挡住部分方向，但至少应有 2 个走法
-        let moves = b.pseudo_moves_for(Pos::new(9, 1));
-        assert!(!moves.is_empty());
+        // 马 (5,4)，马腿 (4,4) 有子 → 向上的两个方向被封
+        let b = board_with(
+            &[
+                (5, 4, PieceKind::Horse, Side::White),
+                (4, 4, PieceKind::Pawn, Side::White),
+                (9, 4, PieceKind::King, Side::White),
+                (0, 4, PieceKind::King, Side::Black),
+            ],
+            Side::White,
+        );
+        let moves = b.pseudo_moves_for(Pos::new(5, 4));
+        assert!(
+            !moves.iter().any(|m| m.to == Pos::new(3, 3) || m.to == Pos::new(3, 5)),
+            "马腿被蹩时不应能走 (3,3)/(3,5)"
+        );
     }
 
     #[test]
     fn test_cannon_capture_needs_screen() {
-        let mut b = XiangqiBoard::new();
-        // 炮 (7,1) 沿列向上：先无子可走，遇黑炮(2,1) 需翻山
-        let moves = b.pseudo_moves_for(Pos::new(7, 1));
-        let captures: Vec<_> = moves.iter().filter(|m| m.captured.is_some()).collect();
-        assert!(captures.is_empty(), "隔着空档不应有吃子");
+        // 白炮 (5,1)，隔一子（白兵 (4,1)）可吃黑车 (2,1)
+        let b = board_with(
+            &[
+                (5, 1, PieceKind::Cannon, Side::White),
+                (4, 1, PieceKind::Pawn, Side::White),
+                (2, 1, PieceKind::Rook, Side::Black),
+                (9, 4, PieceKind::King, Side::White),
+                (0, 4, PieceKind::King, Side::Black),
+            ],
+            Side::White,
+        );
+        let moves = b.pseudo_moves_for(Pos::new(5, 1));
+        assert!(
+            moves.iter().any(|m| m.to == Pos::new(2, 1) && m.captured.is_some()),
+            "炮隔一子应能吃 (2,1) 的黑车"
+        );
+        // 无炮架时不可吃
+        let b2 = board_with(
+            &[
+                (5, 1, PieceKind::Cannon, Side::White),
+                (2, 1, PieceKind::Rook, Side::Black),
+                (9, 4, PieceKind::King, Side::White),
+                (0, 4, PieceKind::King, Side::Black),
+            ],
+            Side::White,
+        );
+        let moves2 = b2.pseudo_moves_for(Pos::new(5, 1));
+        assert!(
+            !moves2.iter().any(|m| m.to == Pos::new(2, 1)),
+            "无炮架时炮不能吃子"
+        );
     }
 
     #[test]

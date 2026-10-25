@@ -250,6 +250,21 @@ impl GameRules for GoBoard {
 mod tests {
     use super::*;
 
+    fn board_with(cells: &[(usize, usize, Side)], side: Side) -> GoBoard {
+        let mut b = GoBoard {
+            board: [[None; N]; N],
+            side,
+            history: Vec::new(),
+            ko: None,
+            passes: 0,
+            status: GameStatus::Ongoing,
+        };
+        for (r, c, s) in cells {
+            b.board[*r][*c] = Some(Piece { kind: PieceKind::Stone, side: *s });
+        }
+        b
+    }
+
     #[test]
     fn test_first_move_ok() {
         let mut b = GoBoard::new();
@@ -266,17 +281,27 @@ mod tests {
 
     #[test]
     fn test_capture_single_stone() {
-        let mut b = GoBoard::new();
-        // 白 (0,1)，黑 (0,0)、(1,0) 后白仅剩一气，黑再落 (0,2) 不应立即提
-        b.make_move(&Move::drop(Pos::new(0, 1))).unwrap(); // 白
-        b.make_move(&Move::drop(Pos::new(0, 0))).unwrap(); // 黑
-        b.make_move(&Move::drop(Pos::new(5, 5))).unwrap(); // 白
-        b.make_move(&Move::drop(Pos::new(1, 0))).unwrap(); // 黑
-        b.make_move(&Move::drop(Pos::new(6, 6))).unwrap(); // 白
-        let mv = Move::drop(Pos::new(0, 2)); // 黑提白 (0,1)
-        let mut probe = b.clone();
-        assert!(probe.make_move(&mv).is_ok());
-        assert!(probe.get(Pos::new(0, 1)).is_none(), "白子应被提掉");
+        // 白子 (0,1) 仅剩 (0,2) 一口气；黑落 (0,2) 应提掉白子
+        let mut b = board_with(
+            &[(0, 1, Side::White), (0, 0, Side::Black), (1, 1, Side::Black)],
+            Side::Black,
+        );
+        assert!(b.make_move(&Move::drop(Pos::new(0, 2))).is_ok());
+        assert!(b.get(Pos::new(0, 1)).is_none(), "白子应被提掉");
+    }
+
+    #[test]
+    fn test_suicide_rejected() {
+        // 白子四邻全黑且自身无气 → 自杀，应被拒绝
+        let mut b = board_with(
+            &[
+                (0, 0, Side::Black),
+                (0, 2, Side::Black),
+                (1, 1, Side::Black),
+            ],
+            Side::White,
+        );
+        assert!(b.make_move(&Move::drop(Pos::new(0, 1))).is_err(), "禁入点应被拒绝");
     }
 
     #[test]
